@@ -1,0 +1,15 @@
+-- A `wc`-style tool combining POSIX io with vectorized text processing.
+-- Reads the file named by the last argument (this file itself when run with no
+-- extra argument) and reports its line, word, and byte counts.
+--
+--   snel run examples/wc.sn examples/rosetta.sn
+
+use std;
+
+pub fun main(io: { read: fun([u8]) -> [u8], args: fun() -> [[u8]] }) -> [u8] = (
+  let path  = last(io.args());
+  let text  = io.read(path);
+  let bytes = len(text);
+  let words = len(std.words(text));
+  let nl    = sum(select(text = chr(10), 1, 0));   -- number of newline bytes
+  join(" ", [std.itoa(nl), std.itoa(words), std.itoa(bytes), path]))

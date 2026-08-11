@@ -1,0 +1,36 @@
+-- Modules are just funs and tabs: `mod` desugars to a fun returning a tab of
+-- its `pub` names. So a *parametric* module is a functor — a function from
+-- modules to modules — and "linking" is just building a tab of the pieces you
+-- want and projecting through it. No new machinery beyond funs and tabs.
+
+-- A functor: `nearest` is parameterised by a `metric` module and builds on it.
+-- Dependency injection falls out for free — pass any metric with a `dist`.
+mod nearest(metric: { dist: fun(f64, f64) -> f64 }) {
+  pub fun closer(x: f64, a: f64, b: f64) -> f64 = if metric.dist(x, a) < metric.dist(x, b) then a else b
+};
+
+let euclid = { dist = fun(a: f64, b: f64) -> f64 = abs(a - b) };
+let n = nearest(euclid);
+pub let pick = n.closer(3.0, 1.0, 8.0);         -- 1.0 (nearer to 3.0 than 8.0 is)
+
+-- Linking: gather two modules' bindings into one tab and use it by projection.
+let arith = { inc = fun(x: i64) -> i64 = x + 1 };
+let logic = { even = fun(x: i64) -> bit = x % 2 = 0 };
+let link = { inc = arith.inc, even = logic.even };
+pub let linked = link.even(link.inc(7));        -- true
+
+-- A closure "object": a maker returns a record of closures over its captured
+-- parameters — state without mutation.
+fun adder(base: i64) -> { of: fun(i64) -> i64 } = { of = fun(x: i64) -> i64 = x + base };
+let add10 = adder(10);
+pub let bumped = add10.of(5);                    -- 15
+
+-- Parametric module carrying its own state: a bank of `eps`-tolerant compares.
+mod approx(eps: f64) {
+  pub fun near(x: f64, y: f64) -> bit = abs(x - y) < eps;
+  pub fun far(x: f64, y: f64) -> bit = not (abs(x - y) < eps)
+};
+let loose = approx(1.0);
+let tight = approx(0.001);
+pub let loose_says = loose.near(1.0, 1.5);      -- true
+pub let tight_says = tight.near(1.0, 1.5);      -- false

@@ -1,0 +1,7 @@
+-- A tiny text module, used by the tour via `use text`. Strings are [u8].
+
+-- number of separator-delimited fields in s
+pub fun fields(s: [u8], sep: [u8]) -> i64 = len(split(sep, s));
+
+-- does s contain needle?
+pub fun has(s: [u8], needle: [u8]) -> bit = find(needle, s) <> nil

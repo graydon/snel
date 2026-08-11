@@ -1,0 +1,51 @@
+-- Evaluate arithmetic like "(+1(*23))" -> 7 — fully-parenthesized prefix, one
+-- digit per number. There is no parser and no tree: the expression is kept as
+-- two parallel columns — its characters, and a value for each position — and
+-- collapsed in place.
+--
+-- Each pass finds every innermost group "(op a b)" at once, computes all their
+-- results in one vector, and splices each result back where its "(" was. A fold
+-- of enough passes flattens any depth of nesting. Every line operates on the
+-- whole column, not one element at a time.
+
+-- character tests, applied to a whole string at once, giving a mask
+fun digit(s: [u8]) -> [bit] = and(s >= '0', s <= '9');
+fun oper(s: [u8])  -> [bit] = or(or(s = '+', s = '-'), s = '*');
+
+-- the same mask read k characters to the right (false past the end), so a
+-- position can look at its neighbours without any indexing loop
+fun ahead(m: [bit], k: i64) -> [bit] = shift(k, false, m);
+
+-- One reduction pass over the columns {s = characters, v = value at each position}.
+fun reduce(e: { s: [u8], v: [i64] }) -> { s: [u8], v: [i64] } = (
+  let s = e.s;
+  let v = e.v;
+  let n = len(s);
+  -- a group starts wherever "( op digit digit )" lines up — asked at every
+  -- position simultaneously, so `starts` is a mask over the whole string
+  let starts = and(s = '(', and(ahead(oper(s), 1), and(ahead(digit(s), 2),
+               and(ahead(digit(s), 3), ahead(s = ')', 4)))));
+  let g = which(starts);                       -- the '(' index of each group
+  -- gather each group's operator and its two operand values, then evaluate them
+  -- all at once (select is the branchless, vectorized choice of operator)
+  let op = s[g + 1];
+  let a  = v[g + 2];
+  let b  = v[g + 3];
+  let res = select(op = '+', a + b, select(op = '-', a - b, a * b));
+  -- splice: the '(' becomes the result; the four characters it consumed vanish.
+  -- `scatter` writes the results at the '(' positions; a keep-mask drops the rest.
+  let dead = cat(cat(g + 1, g + 2), cat(g + 3, g + 4));
+  let keep = scatter(dead, false, rep(n, true));
+  { s = scatter(g, '0', s)[which(keep)],       -- '(' -> a placeholder digit
+    v = scatter(g, res, v)[which(keep)] });    --      with its value carried in v
+
+fun evalx(src: [u8]) -> i64 = (
+  let start = { s = src, v = ord(src) - ord('0') };            -- digits -> their values
+  let done = fold(fun(e: { s: [u8], v: [i64] }, k: i64) -> { s: [u8], v: [i64] } = reduce(e),
+                  start, iota(len(src)));                      -- enough passes for any depth
+  first(done.v));
+
+pub let e1 = evalx("(+12)");           -- 1 + 2       = 3
+pub let e2 = evalx("(*(+12)(-95))");   -- (1+2)*(9-5) = 12
+pub let e3 = evalx("(+1(*23))");       -- 1 + (2*3)   = 7
+pub let e4 = evalx("(-(*34)(+11))")    -- (3*4)-(1+1) = 10

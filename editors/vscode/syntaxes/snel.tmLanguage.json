@@ -1,0 +1,95 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "snel",
+  "scopeName": "source.snel",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#chars" },
+    { "include": "#numbers" },
+    { "include": "#keywords" },
+    { "include": "#types" },
+    { "include": "#builtins" },
+    { "include": "#declnames" },
+    { "include": "#operators" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.documentation.snel",
+          "match": "^\\s*--.*$"
+        },
+        { "name": "comment.line.double-dash.snel", "match": "--.*$" }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.snel",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        { "name": "constant.character.escape.snel", "match": "\\\\(x[0-9a-fA-F]{2}|[nt\\\\\"])" }
+      ]
+    },
+    "chars": {
+      "name": "string.quoted.single.snel",
+      "match": "'(\\\\x[0-9a-fA-F]{2}|\\\\.|[^'\\\\])'"
+    },
+    "numbers": {
+      "patterns": [
+        { "name": "constant.numeric.hex.snel", "match": "\\b0[xX][0-9a-fA-F_]+\\b" },
+        { "name": "constant.numeric.binary.snel", "match": "\\b0[bB][01_]+\\b" },
+        { "name": "constant.numeric.bitvec.snel", "match": ":[01][01_]*" },
+        { "name": "constant.other.symbol.snel", "match": ":[A-Za-z_][A-Za-z0-9_]*" },
+        {
+          "name": "constant.numeric.snel",
+          "match": "\\b[0-9][0-9_]*(\\.[0-9][0-9_]*)?([eE][-+]?[0-9]+)?\\b"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.snel",
+          "match": "\\b(if|then|else|try|err|is|where)\\b"
+        },
+        {
+          "name": "keyword.declaration.snel",
+          "match": "\\b(let|fun|typ|mod|pub|use|do|end)\\b"
+        },
+        { "name": "constant.language.snel", "match": "\\b(nil|true|false|inf|nan)\\b" },
+        { "name": "keyword.operator.word.snel", "match": "\\b(and|or|not)\\b" }
+      ]
+    },
+    "types": {
+      "name": "support.type.snel",
+      "match": "\\b(bit|i64|f64|u8|str|sym)\\b"
+    },
+    "builtins": {
+      "name": "support.function.builtin.snel",
+      "match": "\\b(add|sub|mul|div|rem|neg|abs|itof|ftoi|sqrt|floor|ceil|sign|ord|chr|eq|ne|lt|le|gt|ge|len|cat|iota|grade|sum|prod|min|max|isnil|all|any|rev|take|drop|first|last|which|distinct|in|map|map2|fold|scan|filter|group|get|select|find|split|join|locals|reflect|show|encode|decode|parse|unparse|at|rep|scatter|shift|sums|prods|member|matches|runs|partition|windows|tojson|fromjson|tocsv|fromcsv)\\b"
+    },
+    "declnames": {
+      "patterns": [
+        {
+          "match": "\\b(fun)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": { "name": "keyword.declaration.snel" },
+            "2": { "name": "entity.name.function.snel" }
+          }
+        },
+        {
+          "match": "\\b(let|typ|mod|use)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": { "name": "keyword.declaration.snel" },
+            "2": { "name": "variable.other.snel" }
+          }
+        }
+      ]
+    },
+    "operators": {
+      "name": "keyword.operator.snel",
+      "match": "\\|>|->|<=|>=|<>|[-+*/%<>=|?:]"
+    }
+  }
+}

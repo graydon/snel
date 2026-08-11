@@ -1,0 +1,2 @@
+-- a map with a closure: one application per element
+pub let r = sum(map(fun(x: i64) -> i64 = x * x + 1, iota(2000000)))

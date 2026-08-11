@@ -1,0 +1,16 @@
+/target
+/build
+*.o
+*.a
+/c/snel
+/editors/vscode/node_modules
+/fuzz/corpus
+/fuzz/findings
+/fuzz/artifacts
+/fuzz/target
+/fuzz/Cargo.lock
+*.profraw
+.snelcache/
+
+*.pdf
+*.sni

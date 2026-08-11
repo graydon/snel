@@ -1,0 +1,3 @@
+-- grade/sort a shuffled-ish column (indexing by the sort permutation)
+let v = (iota(300000) * 2654435761) % 300000
+pub let r = sum(v[grade(v)])

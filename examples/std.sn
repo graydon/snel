@@ -1,0 +1,63 @@
+-- A small standard library above the builtins — everyday helpers, each a pure,
+-- non-recursive function over columns. Import with `use std`. A statistic is a
+-- reduction, a search is a mask plus `which`, formatting a number is arithmetic
+-- over a column of digits.
+
+-- generation
+pub fun range(lo: i64, n: i64) -> [i64] = iota(n) + lo;      -- [lo .. lo+n-1]
+
+-- numeric statistics (f64 columns). `v - m` broadcasts the scalar mean across
+-- the whole column, so the squared deviations need no loop.
+pub fun mean(v: [f64]) -> f64 = sum(v) / itof(len(v));
+pub fun variance(v: [f64]) -> f64 = (
+  let m = mean(v);
+  mean((v - m) * (v - m)));
+pub fun stddev(v: [f64]) -> f64 = sqrt(variance(v));
+
+-- elementwise (vector, vector) min/max: `select` picks from `a`/`b` per element
+pub fun maxs(a: [i64], b: [i64]) -> [i64] = select(a > b, a, b);
+pub fun mins(a: [i64], b: [i64]) -> [i64] = select(a < b, a, b);
+-- clamp each element into [lo, hi] (scalar bounds broadcast against the column)
+pub fun clamp(v: [i64], lo: i64, hi: i64) -> [i64] = (
+  let hi_capped = select(v < hi, v, hi);
+  select(hi_capped > lo, hi_capped, lo));
+
+-- counting and searching: a [bit] mask sums straight to i64 (a set bit is a 1)
+pub fun count(mask: [bit]) -> i64 = sum(mask);
+-- the first index where x occurs, or -1 — `which` gives all of them, and
+-- appending -1 supplies the answer for the empty case with no branch
+pub fun indexof(v: [i64], x: i64) -> i64 = first(cat(which(v = x), [0 - 1]));
+
+-- ordering: sorting a column is indexing it by its own sort permutation
+pub fun sort(v: [i64]) -> [i64] = v[grade(v)];
+pub fun median(v: [i64]) -> i64 = at(len(v) / 2, sort(v));
+
+-- byte classification (u8 comparisons; '0' is the byte '\x30', etc.)
+pub fun isdigit(c: u8) -> bit = and(c >= '0', c <= '9');
+pub fun isalpha(c: u8) -> bit = or(and(c >= 'a', c <= 'z'), and(c >= 'A', c <= 'Z'));
+pub fun isspace(c: u8) -> bit = in(c, " \t\n");
+
+-- parse a non-negative decimal: a left fold is Horner's rule (acc*10 + digit)
+pub fun atoi(s: [u8]) -> i64 = fold(fun(acc: i64, c: u8) -> i64 = acc * 10 + ord(c) - ord('0'), 0, s);
+
+-- format a non-negative integer as decimal, vectorized: `prods` builds the
+-- powers of ten, one division per place yields every digit at once, and we drop
+-- the leading zeros
+pub fun itoa(n: i64) -> [u8] = (
+  let place  = rev(prods(cat([1], rep(18, 10))));      -- [10^18, ..., 100, 10, 1]
+  let digits = (n / place) % 10;                       -- each digit, most significant first
+  drop(first(cat(which(digits <> 0), [18])), chr(digits + ord('0'))));
+
+-- text helpers ([u8] and [[u8]])
+pub fun lines(s: [u8]) -> [[u8]] = split("\n", s);
+pub fun unwords(ws: [[u8]]) -> [u8] = join(" ", ws);
+-- split on runs of any whitespace: normalize every space/tab/newline to a space
+-- (one vectorized `select` over the whole string), then split
+pub fun words(s: [u8]) -> [[u8]] = (
+  let spaced = select(or(or(s = ' ', s = '\t'), s = '\n'), ' ', s);
+  filter(fun(t: [u8]) -> bit = len(t) > 0, split(" ", spaced)));
+pub fun contains(s: [u8], needle: [u8]) -> bit = find(needle, s) <> nil;
+-- the length guards keep `take`/`drop` in range; `if` is scalar and lazy, so the
+-- comparison that would go out of bounds is never evaluated
+pub fun startswith(s: [u8], pre: [u8]) -> bit = if len(s) >= len(pre) then all(take(len(pre), s) = pre) else false;
+pub fun endswith(s: [u8], suf: [u8]) -> bit = if len(s) >= len(suf) then all(drop(len(s) - len(suf), s) = suf) else false;

@@ -1,0 +1,3 @@
+-- vectorized text: split a big comma-joined string and count fields
+let s = join(",", map(fun(x: i64) -> [u8] = "field", iota(50000)))
+pub let r = len(split(s, ","))

@@ -1,0 +1,2 @@
+-- a fold: one interpreter step (closure application) per element
+pub let r = fold(fun(a: i64, x: i64) -> i64 = a + x, 0, iota(2000000))

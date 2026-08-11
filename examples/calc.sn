@@ -1,0 +1,31 @@
+-- A calculator for Reverse Polish Notation, written entirely in Snel — no
+-- parse/encode hooks, only general primitives (fold, string ops, ord via
+-- std.atoi, arithmetic). It is a genuine little language processor: a left fold
+-- over space-separated tokens carrying a vector as the operand stack. Each token
+-- either pushes a number or applies an operator to the top two operands.
+--
+-- RPN needs no recursion — evaluation is *exactly* a fold — which is precisely
+-- why it fits a loopless, recursion-free language. (Infix with precedence would
+-- need shunting-yard's unbounded inner pop loop, which Snel can't express; RPN
+-- sidesteps that while still expressing every precedence via token order.)
+
+use std;
+
+fun apply(op: u8, a: i64, b: i64) -> i64 = if op = '+' then a + b else if op = '-' then a - b else if op = '*' then a * b else a / b;
+
+-- one fold step: push a number, or reduce the top two operands by an operator
+fun step(stack: [i64], tok: [u8]) -> [i64] = (
+  let n = len(stack);
+  if and(len(tok) = 1, in(first(tok), "+-*/"))
+    then cat(take(n - 2, stack), [apply(first(tok), last(take(n - 1, stack)), last(stack))])
+    else cat(stack, [std.atoi(tok)]));
+
+fun rpn(src: [u8]) -> i64 = first(fold(step, ([] : [i64]), filter(fun(t: [u8]) -> bit = len(t) > 0, split(" ", src))));
+
+pub let ex1 = rpn("3 4 + 5 *");      -- (3 + 4) * 5   = 35
+pub let ex2 = rpn("10 2 / 3 -");     -- 10 / 2 - 3    = 2
+pub let ex3 = rpn("2 3 4 * +");      -- 2 + (3 * 4)   = 14
+pub let ex4 = rpn("100 10 - 5 /");   -- (100 - 10) / 5 = 18
+
+-- results render back to text with std.itoa
+pub let shown = std.itoa(rpn("6 7 * 2 +"));  -- "44"

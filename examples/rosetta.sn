@@ -1,0 +1,75 @@
+-- Familiar tasks, each as a pipeline of bulk operations over whole columns — no
+-- loops, no recursion. Filter a column, sum a mask, scan a running total; the
+-- shape of the pipeline is the algorithm.
+
+-- factorial: the product of 1..n
+fun fact(n: i64) -> i64 = prod(iota(n) + 1);
+pub let fact6 = fact(6);                                  -- 720
+
+-- dot product: multiply the two columns elementwise, then add it all up
+fun dot(a: [i64], b: [i64]) -> i64 = sum(a * b);
+pub let dotp = dot([1, 2, 3], [4, 5, 6]);                 -- 32
+
+-- mean of a column
+fun mean(v: [f64]) -> f64 = sum(v) / itof(len(v));
+pub let avg = mean([2.0, 4.0, 9.0]);                      -- 5.0
+
+-- standard deviation: `v - m` subtracts the mean from every element at once, so
+-- the squared deviations are just `(v - m) * (v - m)` — no loop, no map
+fun stddev(v: [f64]) -> f64 = (
+  let m = mean(v);
+  sqrt(mean((v - m) * (v - m))));
+pub let sd = stddev([2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0]);  -- 2.0
+
+-- FizzBuzz as codes (0=n, 1=Fizz, 2=Buzz, 3=FizzBuzz): two divisibility masks
+-- become two indicator columns and add — the branching is arithmetic
+fun fizzbuzz(n: i64) -> [i64] = (
+  let r = iota(n) + 1;
+  select((r % 3) = 0, 1, 0) + select((r % 5) = 0, 2, 0));
+pub let fb = fizzbuzz(15);   -- [0, 0, 1, 0, 2, 1, 0, 0, 1, 2, 0, 1, 0, 0, 3]
+
+-- primes by trial division: n > 1 and none of 2..n-1 divide it. `n % [2..n-1]`
+-- is a whole column of remainders; the test is that they're all nonzero
+fun prime(n: i64) -> bit = and(n > 1, all((n % drop(2, iota(n))) <> 0));
+pub let primes = filter(prime, iota(30) + 1);            -- [2, 3, 5, 7, 11, 13, 17, 19, 23, 29]
+
+-- count vowels: a 256-entry table marks the vowel bytes; one gather turns the
+-- whole string into a 0/1 column, which sums to the count
+let vowel = scatter(ord("aeiou"), true, rep(256, false));
+fun vowels(s: [u8]) -> i64 = sum(vowel[ord(s)]);
+pub let nv = vowels("rosetta code");                     -- 5
+
+-- run-length encode: a run starts wherever a byte differs from the one before
+-- it (compare the string against itself shifted by one position); the run
+-- lengths are the gaps between successive start positions
+fun rle(s: [u8]) -> { ch: [u8], run: [i64] } = (
+  let starts = which(cat([true], drop(1, s) <> take(len(s) - 1, s)));
+  { ch = s[starts], run = drop(1, cat(starts, [len(s)])) - starts });
+pub let runlen = rle("aaabbbcccd");   -- { ch = "abcd", run = [3, 3, 3, 1] }
+
+-- running total: a prefix sum is a single builtin
+pub let runsum = sums([3, 1, 4, 1, 5]);                  -- [3, 4, 8, 9, 14]
+
+-- Fibonacci: carry a {a, b} pair as the scan's running state, then read the
+-- first field of each step — the classic two-variable loop, as a scan
+fun fibs(n: i64) -> [i64] = map(
+  fun(st: {a: i64, b: i64}) -> i64 = st.a,
+  scan(fun(st: {a: i64, b: i64}, x: i64) -> {a: i64, b: i64} = { a = st.b, b = st.a + st.b },
+       { a = 0, b = 1 }, iota(n)));
+pub let fib10 = fibs(10);                                 -- [1, 1, 2, 3, 5, 8, 13, 21, 34, 55]
+
+-- sort and median: sorting is just indexing a column by its own sort order
+fun sort(v: [i64]) -> [i64] = v[grade(v)];
+fun median(v: [i64]) -> i64 = at(len(v) / 2, sort(v));
+pub let sorted = sort([3, 1, 4, 1, 5, 9, 2, 6]);         -- [1, 1, 2, 3, 4, 5, 6, 9]
+pub let med = median([3, 1, 4, 1, 5]);                   -- 3
+
+-- word frequency: group the words, then count the rows in each group
+fun freq(text: [u8]) -> { word: [[u8]], n: [i64] } = (
+  let g = group({ word = split(" ", text) }, :word);
+  { word = g.word, n = map(fun(rows: {word: [[u8]]}) -> i64 = len(rows.word), g.rows) });
+pub let wf = freq("a b a c b a");   -- { word = ["a", "b", "c"], n = [3, 2, 1] }
+
+-- temperature conversion, elementwise over a whole column of readings
+fun c2f(c: [f64]) -> [f64] = c * 1.8 + 32.0;
+pub let temps = c2f([0.0, 20.0, 100.0]);                 -- [32.0, 68.0, 212.0]

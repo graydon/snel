@@ -1,0 +1,6 @@
+{
+  // The extension defaults to plain `snel`, which only works if the binary is
+  // on PATH. Point it at the build in this checkout instead.
+  "snel.serverPath": "${workspaceFolder}/target/release/snel",
+  "snel.enableServer": true
+}

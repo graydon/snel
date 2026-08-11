@@ -1,0 +1,57 @@
+-- Sequence analysis, all vectorized. Five composable primitives, each returning
+-- a mask ([bit]) or a vector of vectors ([[T]]): they combine with the ordinary
+-- mask ops (and/or/not/which/sum) and with `map`, and work on any vector — not
+-- just strings.
+--
+--   member(set, v)        -- classify: mask of which elements fall in a set
+--   matches(needle, hay)  -- locate:   mask of every contiguous-match start
+--   runs(v)               -- edges:    mask of run-start boundaries
+--   partition(starts, v)  -- cut:      split v into segments at a mask
+--   windows(k, v)         -- window:   every contiguous length-k slice
+--
+--   snel run examples/sequences.sn
+
+let text = "the quick brown fox";
+
+-- classify: count vowels and locate blanks in one bulk pass each
+pub let n_vowel = sum(member("aeiou", text));   -- 5
+pub let blanks  = which(member(" ", text));     -- byte offsets of the spaces
+
+-- locate: every start position of a pattern (matches generalizes find to all
+-- occurrences, and to any element type)
+pub let o_at    = which(matches("o", text));    -- offsets of every 'o'
+pub let seq_at  = which(matches([1, 2, 3], [1, 2, 3, 9, 1, 2, 3]));  -- [0, 4]
+
+-- run-length encoding: `runs` marks run boundaries, `partition` cuts there, and
+-- `map` reads each run's value and length
+let sample = "aaabbbbcca";
+let segs   = partition(runs(sample), sample);
+pub let rle = { val = map(first, segs), len = map(len, segs) };    -- "abca" / [3,4,2,1]
+pub let longest_run = max(map(len, segs));                         -- 4
+
+-- rolling windows: any moving statistic is `map` of a reducer over the windows.
+-- Builtins are first-class values, so the reducer is just `sum` / `max`.
+let series = [4, 1, 7, 2, 8, 3];
+pub let moving_sum = map(sum, windows(3, series));  -- [12, 10, 17, 13]
+pub let moving_max = map(max, windows(3, series));  -- [7, 7, 8, 8]
+
+-- tokenize by a *class* rather than a fixed separator: cut wherever blank-ness
+-- changes (runs over the blank mask), then keep the non-blank segments
+fun words(s: [u8]) -> [[u8]] = (
+  let segs = partition(runs(member(" ", s)), s);
+  filter(fun(w: [u8]) -> bit = first(w) <> ' ', segs));
+pub let toks = words(text);                      -- ["the","quick","brown","fox"]
+
+-- non-overlapping k-chunks (rather than rolling): start a new segment every k
+let nums = [10, 20, 30, 40, 50, 60, 70];
+pub let chunks3 = partition((iota(len(nums)) % 3) = 0, nums);  -- [[10,20,30],[40,50,60],[70]]
+
+-- a few regex fragments as combinators (classes -> member, literals -> matches,
+-- anchors -> at, wildcard/adjacency -> shift+and, quantifiers -> runs)
+let rx = "art ant a9t apt";
+pub let re_class = which(member("aeiou", rx));   -- [aeiou]    positions
+pub let re_lit   = which(matches("ant", rx));    -- ant        match starts
+pub let re_anchd = at(0, matches("art", rx));    -- ^art       true
+pub let re_wild  = which(and(rx = 'a', shift(2, false, rx = 't')));   -- a.t   positions
+let is_d = and(rx >= '0', rx <= '9');
+pub let re_plus  = sum(and(is_d, not(shift(-1, false, is_d))))        -- [0-9]+ count (run starts)

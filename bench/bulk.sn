@@ -1,0 +1,2 @@
+-- bulk elementwise arithmetic + reduction over a big column (few interp steps)
+pub let r = sum((iota(2000000) * 3 + 7) - iota(2000000) * 2)

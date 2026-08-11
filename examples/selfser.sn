@@ -1,0 +1,27 @@
+-- A self-serializer: read Snel source, round-trip it through the binary format,
+-- and write the bytes out. `snel run examples/selfser.sn` serializes *itself*
+-- (with no file argument, it reads the last argv entry, which is this file).
+--
+--   parse   : source text -> AST (as data)
+--   encode  : AST         -> binary
+--   decode  : binary      -> AST
+--   unparse : AST         -> source text
+--
+-- so `unparse(decode(encode(parse(src))))` is exactly what `snel bin` does,
+-- here written as an ordinary Snel expression over pure data.
+
+pub fun main(io: {
+  read:  fun([u8]) -> [u8],
+  write: fun([u8], [u8]) -> nil,
+  args:  fun() -> [[u8]]
+}) -> [u8] = (
+  let path     = last(io.args());
+  let ast      = parse(io.read(path));
+  let bytes    = encode(ast);
+  let restored = unparse(decode(bytes));           -- source recovered from binary
+  let faithful = all(restored = unparse(ast));      -- equals the direct printing
+  let _        = io.write(cat(path, ".bin"), bytes);
+  if faithful
+    then join("", ["ok: ", show(len(bytes)), " bytes -> ", path, ".bin"])
+    else "round-trip MISMATCH"
+);

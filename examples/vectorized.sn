@@ -1,0 +1,40 @@
+-- Control flow without branching: compute a mask (a column of yes/no) and let
+-- `select` choose from it elementwise. FizzBuzz, ROT13, clamp, sign, and a
+-- histogram — each normally an inner loop with an `if` — are a couple of lines
+-- over the whole input.
+--
+-- (`if` is scalar and lazy; a `[bit]` mask condition is a type error that points
+-- to `select`.)
+
+-- a [bit] mask as a 0/1 indicator column (select broadcasts the scalar arms)
+fun ind(m: [bit]) -> [i64] = select(m, 1, 0);
+
+-- FizzBuzz as codes, branchless: 1=Fizz, 2=Buzz, 3=FizzBuzz.
+-- Two masks become two indicator columns and add.
+fun fizzbuzz(n: i64) -> [i64] = (
+  let r = iota(n) + 1;
+  ind((r % 3) = 0) + 2 * ind((r % 5) = 0));
+pub let fb = fizzbuzz(15);          -- [0, 0, 1, 0, 2, 1, 0, 0, 1, 2, 0, 1, 0, 0, 3]
+
+-- ROT13 over a whole string at once: rotate every byte, then `select` splices
+-- the rotated value in only where the byte was a lowercase letter.
+fun rot13(s: [u8]) -> [u8] = (
+  let c   = ord(s);
+  let low = and(s >= 'a', s <= 'z');
+  let rot = ((c - ord('a') + 13) % 26) + ord('a');
+  chr(select(low, rot, c)));
+pub let secret = rot13("hello, world");            -- "uryyb, jbeyq"
+pub let involutive = rot13(rot13("hello, world"));  -- back to "hello, world"
+
+-- clamp each element into [0, 9] with two masks — nested select, no if
+fun clamp09(v: [i64]) -> [i64] = select(v > 9, 9, select(v < 0, 0, v));
+pub let clamped = clamp09([-3, 4, 12, 7, 0]);     -- [0, 4, 9, 7, 0]
+
+-- sign as pure index arithmetic: (v>0) - (v<0), all at once
+fun signs(v: [i64]) -> [i64] = ind(v > 0) - ind(v < 0);
+pub let sg = signs([-5, 0, 7, -1, 3]);            -- [-1, 0, 1, -1, 1]
+
+-- count elements in each bucket 0..3 without looping: compare against every
+-- threshold via a mask and sum. (histogram of small values)
+fun hist4(v: [i64]) -> [i64] = [sum(ind(v = 0)), sum(ind(v = 1)), sum(ind(v = 2)), sum(ind(v = 3))];
+pub let h = hist4([0, 1, 1, 2, 3, 3, 3, 0]);      -- [2, 2, 1, 3]

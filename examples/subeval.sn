@@ -1,0 +1,51 @@
+-- Subprocess eval: run a closure in a fresh interpreter and bring its result
+-- back. There is one primitive, `subeval`. The closure crosses to the child as
+-- binary — `encode` here, `decode` there, the same format `snel bin` uses — and
+-- the child (`snel apply`) applies it to its own `io` and writes the closure's
+-- byte response back. Because a closure carries its captured environment, the
+-- parent's values travel with it automatically; because the child is a separate
+-- process, its effects stay bounded there. This is `eval` without giving up the
+-- parent's guarantees.
+--
+--   snel run examples/subeval.sn
+
+-- The io capability the child hands the closure. A closure names only the fields
+-- it uses (a narrower record still matches — see the pure thunks below), so this
+-- is the full menu, not a requirement.
+typ IO = { exe:   fun() -> [u8],
+           spawn: fun([u8], [[u8]], [u8], [[u8]]) -> [u8],
+           read:  fun([u8]) -> [u8],
+           write: fun([u8], [u8]) -> nil };
+
+-- Ship `thunk` to a child interpreter and return the bytes it produced. `io.exe`
+-- is the path of our own interpreter; `io.spawn` runs it as `snel apply`, feeding
+-- `encode(thunk)` on stdin and collecting the child's stdout. No source is
+-- generated and no scratch files are written — the closure and its result both
+-- cross as binary. A thunk returns its result already `encode`d, so `subeval`
+-- stays one function that works for any result type; the caller `decode`s it.
+fun subeval(io: IO, thunk: fun(IO) -> [u8]) -> [u8] = (
+  io.spawn(io.exe(), ["apply"], encode(thunk), []));
+
+-- The same, but letting the child resolve remote (`use x = "url"`) imports.
+-- The capability is explicit and off by default: the parent decides, per call,
+-- whether the sandboxed child may reach the network at all.
+fun subeval_remote(io: IO, allow: bit, thunk: fun(IO) -> [u8]) -> [u8] = (
+  let argv = select(allow, ["apply", "--remote"], ["apply"]);
+  io.spawn(io.exe(), argv, encode(thunk), []));
+
+pub fun main(io: IO) -> { fact: i64, scaled: i64, echoed: [u8] } = (
+  -- a pure thunk: computed in its own process, ignoring the child's io
+  let fact = (decode(subeval(io, fun(io: IO) -> [u8] = encode(prod(iota(6) + 1)))) : i64);  -- 720
+
+  -- capture two parent values; the closure carries them across on its own
+  let base  = 100;
+  let scale = 3;
+  let scaled = (decode(subeval(io, fun(io: IO) -> [u8] = encode(base * scale + base))) : i64);  -- 400
+
+  -- use the io the child passes in: write then read a scratch file over there
+  let echoed = (decode(subeval(io, fun(io: IO) -> [u8] = (
+                  let path = "/tmp/snel-subeval-echo.txt";
+                  let _ = io.write(path, "pinged");
+                  encode(io.read(path))))) : [u8]);  -- "pinged"
+
+  { fact = fact, scaled = scaled, echoed = echoed });

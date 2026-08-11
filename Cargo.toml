@@ -1,0 +1,17 @@
+[package]
+name = "snel"
+version = "0.1.0"
+edition = "2021"
+default-run = "snel"
+
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lib]
+name = "snel"
+path = "src/lib.rs"
+
+[[bin]]
+name = "snel"
+path = "src/main.rs"

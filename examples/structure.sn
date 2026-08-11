@@ -1,0 +1,34 @@
+-- Parsing nested, bracketed text without recursion or a stack. The key is one
+-- column: the depth at each character — +1 for every '(', -1 for every ')',
+-- accumulated left to right with a prefix sum. That turns nesting into a flat
+-- integer column, and every question below is a mask over it.
+
+-- +1 / -1 / 0 per character, and the running nesting depth after each
+fun incs(s: [u8]) -> [i64] = select(s = '(', 1, 0) - select(s = ')', 1, 0);
+fun depth(s: [u8]) -> [i64] = sums(incs(s));
+
+pub let dstr = depth("(a(bb)((c)))");       -- [1,1,2,2,2,1,2,3,3,2,1,0]
+pub let deep = max(depth("(a(bb)((c)))"));  -- 3 : the deepest nesting
+
+-- balanced iff the depth never goes negative and returns to 0 at the end
+fun balanced(s: [u8]) -> bit = and(all(depth(s) >= 0), last(depth(s)) = 0);
+pub let ok1 = balanced("(()(()))");     -- true
+pub let ok2 = balanced("(()");          -- false  (never closes)
+pub let ok3 = balanced("())(");         -- false  (goes negative)
+
+-- Split on top-level commas only — commas *inside* parens stay put. A separator
+-- is a comma at depth 0; `which` gives their positions, and one `map2` slices
+-- out every field between consecutive separators at once.
+fun fields(s: [u8]) -> [[u8]] = (
+  let seps   = which(and(s = ',', depth(s) = 0));
+  let starts = cat([0 - 1], seps);          -- the separator (or -1) before each field
+  let ends   = cat(seps, [len(s)]);         -- the separator (or len) after each field
+  map2(fun(a: i64, b: i64) -> [u8] = take(b - a - 1, drop(a + 1, s)), starts, ends));
+
+pub let flat   = fields("a,b,c");               -- ["a","b","c"]
+pub let nested = fields("f(x,y),g(z),w");       -- ["f(x,y)","g(z)","w"]  (inner commas kept)
+
+-- One level of "parsing" a call: strip the outer ( ), then split the body on its
+-- top-level commas — so the arguments come out whole, nesting intact.
+fun args(s: [u8]) -> [[u8]] = fields(take(len(s) - 2, drop(1, s)));
+pub let children = args("(add, mul(2,3), 7)")  -- ["add","mul(2,3)","7"]

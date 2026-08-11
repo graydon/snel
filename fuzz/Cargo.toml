@@ -1,0 +1,25 @@
+# Coverage-guided fuzzing, kept in its own crate so the interpreter itself stays
+# dependency-free. Run with:  cargo +nightly fuzz run roundtrip
+[package]
+name = "snel-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.snel]
+path = ".."
+
+[[bin]]
+name = "roundtrip"
+path = "fuzz_targets/roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[workspace]

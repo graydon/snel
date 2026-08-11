@@ -1,0 +1,290 @@
+-- A compiler for a small *structured* language — nested arithmetic expressions
+-- and nested while / if blocks — written in the columnar style, with no loops,
+-- no recursion, and no `if` (control flow is masks and select). Nothing calls
+-- back into the interpreter: it is pure data-transformation.
+--
+-- The rule the whole file follows is that **there are no rows**. A thing with
+-- several attributes is not a vector of records; it is one column per attribute,
+-- all the same length, side by side. An instruction is not a struct, it is nine
+-- parallel columns; a header's condition is not a triple, it is three columns.
+-- Nothing is ever handled one at a time, so a phase that compiles one statement
+-- costs the same as the one that compiles the whole program.
+--
+--   Source (single-char variables a-z, single-digit constants):
+--       x := <expr>              assignment; <expr> may be nested / parenthesized
+--       while (a o b) { ... }     loop while (a o b) holds        (o is < > =)
+--       if (a o b) { ... }        run the block once if (a o b) holds
+--       ! v                      exit with the value of v
+--
+--   Pipeline:  source ──lower──▶ instruction frame ──codegen──▶ aarch64.
+--   The program's answer is the exit code of the native binary it produces.
+
+use std;                                                       -- for std.itoa
+
+-- ─────────────────────────── columns and frames ───────────────────────────
+-- A *frame* is a record whose fields are equal-length columns: the columnar
+-- answer to "a vector of rows". Snel indexes one natively — `f[mask]` keeps
+-- rows and `f[perm]` reorders them — so a frame travels as a single value while
+-- every attribute stays its own column, and no row is ever materialized.
+
+fun concat(parts: [[u8]]) -> [u8] = join("", parts);           -- strings -> one string
+fun flatten(cols: [[i64]]) -> [i64] = fold(cat, [], cols);     -- columns -> one column
+fun singles(bytes: [u8]) -> [[u8]] = map(fun(c: u8) -> [u8] = [c], bytes);
+fun tally(mask: [bit]) -> [i64] = select(mask, 1, 0);          -- a mask, counted as 1/0
+fun blanks(n: i64) -> [u8] = rep(n, ' ');
+fun zeros(n: i64) -> [i64] = rep(n, 0);
+
+-- A lookup table is a column indexed by a key: build one by writing the values
+-- at their keys, and then `t[keys]` answers a whole column of keys at once.
+fun lookup(keys: [i64], vals: [i64], size: i64) -> [i64] = scatter(keys, vals, zeros(size));
+fun lookup_bit(keys: [i64], vals: [bit], size: i64) -> [bit] = scatter(keys, vals, rep(size, false));
+
+-- Glue columns of strings side by side: `paste([["a","b"], ["1","2"]])` is
+-- ["a1", "b2"]. Every string in the result grows at the same time.
+fun paste(cols: [[[u8]]]) -> [[u8]] = fold(
+  fun(built: [[u8]], piece: [[u8]]) -> [[u8]] = map2(cat, built, piece),
+  rep(len(first(cols)), ""), cols);
+
+-- Order rows by several key columns at once, *least* significant key first.
+-- `grade` is stable, so grading by one key after another leaves the rows ordered
+-- by all of them together: a columnar sort needs no comparator and no tuples.
+fun order_by(keys: [[i64]]) -> [i64] = fold(
+  fun(perm: [i64], key: [i64]) -> [i64] = perm[grade(key[perm])],
+  iota(len(first(keys))), keys);
+
+-- Number each row within its run of equal keys: [5,5,5,7,9,9] -> [0,1,2,0,0,1].
+-- `runs` marks where the value changes, `partition` cuts the column there, and
+-- each piece is numbered from zero.
+fun rank_in_run(key: [i64]) -> [i64] = flatten(map(iota, map(len, partition(runs(key), key))));
+
+-- ──────────────────────────── the program text ────────────────────────────
+-- The source is two parallel columns: every character, and the line it came
+-- from. Phase 1 rewrites the characters, and the line column rides along, so an
+-- instruction produced by the last pass still knows which statement it belongs
+-- to. Blanks are dropped; newlines stay, because they separate statements.
+typ Text = { ch: [u8], line: [i64] };
+
+fun text_of(src: [u8]) -> Text = (
+  let ch = src[src <> ' '];
+  { ch = ch, line = sums(tally(ch = '\n')) - tally(ch = '\n') });
+fun line_count(t: Text) -> i64 = max(cat(t.line, [0])) + 1;
+
+-- ───────────────────────── the instruction frame ─────────────────────────
+-- One instruction per row — and not a row in sight. Nine columns:
+--
+--   line, stage   where the instruction lands in program order — `line` is the
+--                 statement it came from, and `stage` breaks ties inside a line
+--                 (a statement's temporaries first, then the statement itself)
+--   kind          SET OP LABEL BRANCH JUMP HALT
+--   dst           destination variable          (set, op)
+--   x, f, y       operands and operator         (op, branch; x alone for set, halt)
+--   blk, top      a block's id, and which end of it   (label, branch, jump)
+--
+-- Instructions are made in six batches — all the ops, all the branches, and so
+-- on — which arrive in no particular order. `stage` and `line` are what put them
+-- back in program order, at the very end, with one sort.
+typ Code = { line: [i64], stage: [i64], kind: [i64], dst: [u8], x: [u8], f: [u8],
+             y: [u8], blk: [i64], top: [bit] };
+
+let SET = 0; let OP = 1; let LABEL = 2; let BRANCH = 3; let JUMP = 4; let HALT = 5;
+
+-- The general constructor: a whole batch of one kind at once. Every column a
+-- kind does not use is filled with blanks, so any two batches can be stacked.
+fun code(kind: i64, line: [i64], stage: [i64], dst: [u8], x: [u8], f: [u8], y: [u8], blk: [i64], top: bit) -> Code = (
+  let n = len(line);
+  { line = line, stage = stage, kind = rep(n, kind), dst = dst, x = x, f = f, y = y, blk = blk, top = rep(n, top) });
+
+-- ...and the six kinds, each naming only the columns it actually carries. `b` is
+-- the blank character column and `z` the zero one, for the fields left unused.
+fun set_code(line: [i64], stage: [i64], dst: [u8], x: [u8]) -> Code = (
+  let b = blanks(len(line));
+  code(SET, line, stage, dst, x, b, b, zeros(len(line)), false));
+fun op_code(line: [i64], stage: [i64], dst: [u8], x: [u8], f: [u8], y: [u8]) -> Code =
+  code(OP, line, stage, dst, x, f, y, zeros(len(line)), false);
+fun label_code(line: [i64], stage: [i64], blk: [i64], top: bit) -> Code = (
+  let b = blanks(len(line));
+  code(LABEL, line, stage, b, b, b, b, blk, top));
+fun branch_code(line: [i64], stage: [i64], x: [u8], f: [u8], y: [u8], blk: [i64]) -> Code =
+  code(BRANCH, line, stage, blanks(len(line)), x, f, y, blk, false);
+fun jump_code(line: [i64], stage: [i64], blk: [i64]) -> Code = (
+  let b = blanks(len(line));
+  code(JUMP, line, stage, b, b, b, b, blk, true));
+fun halt_code(line: [i64], stage: [i64], x: [u8]) -> Code = (
+  let b = blanks(len(line));
+  code(HALT, line, stage, b, x, b, b, zeros(len(line)), false));
+
+-- two batches end to end: the one place the column names are written out
+fun stack(a: Code, b: Code) -> Code = {
+  line = cat(a.line, b.line), stage = cat(a.stage, b.stage), kind  = cat(a.kind, b.kind),
+  dst  = cat(a.dst, b.dst),   x     = cat(a.x, b.x),         f     = cat(a.f, b.f),
+  y    = cat(a.y, b.y),       blk   = cat(a.blk, b.blk),     top   = cat(a.top, b.top) };
+fun no_code() -> Code = (let none = take(0, [0]); code(OP, none, none, "", "", "", "", none, false));
+
+-- Program order, finally: one sort over the (stage, line) keys, and one gather
+-- that carries all nine columns along with it.
+fun in_order(c: Code) -> Code = c[order_by([c.stage, c.line])];
+
+-- ────────────────── phase 1 — expressions become instructions ──────────────────
+-- An expression like  (2 * (3 + 4))  is a tree, but we never build one. Every
+-- innermost group "(a o b)" *anywhere in the program* is rewritten to a fresh
+-- one-letter temporary and emits one instruction; repeat until only atoms
+-- remain. A pass is one expression over the whole text column, so reducing every
+-- statement in the program costs exactly what reducing one would.
+
+let letters = chr(ord('a') + iota(26));                        -- variables
+let temps   = chr(ord('A') + iota(26));                        -- compiler temporaries
+let digits  = "0123456789";
+let atoms   = cat(cat(letters, temps), digits);                -- what may be an operand
+let operators = "+-*/";
+
+-- An innermost group is five characters reading "( operand operator operand )":
+-- one set-membership test per position, and `all` insists they all hold.
+fun is_group(w: [u8]) -> bit = all([
+  at(0, w) = '(',      in(at(1, w), atoms),  in(at(2, w), operators),
+  in(at(3, w), atoms), at(4, w) = ')']);
+
+-- Ask that of every position at once. `windows` hands each position the five
+-- characters starting there — four blanks are appended so the tail positions
+-- still get a (non-matching) window — and `which` turns the yes-answers back
+-- into the positions they came from.
+fun group_starts(t: Text) -> [i64] = which(map(is_group, windows(5, cat(t.ch, "    "))));
+
+-- The reduction state: the text so far, the op instructions so far, and `used` —
+-- a column holding one running temporary-counter *per line*, so every statement
+-- numbers its own temporaries A, B, C… independently and all at the same time.
+typ Pass = { text: Text, code: Code, used: [i64] };
+
+fun reduce(st: Pass, stage: i64) -> Pass = (
+  let s    = st.text.ch;
+  let pos  = group_starts(st.text);                            -- every innermost group
+  let line = st.text.line[pos];                                -- the statement each sits in
+  let slot = st.used[line] + rank_in_run(line);                -- its temporary's number there
+  let name = temps[slot];                                      -- ...and that temporary's letter
+  let eaten = cat(cat(pos + 1, pos + 2), cat(pos + 3, pos + 4));   -- the four characters it swallows
+  -- write the temporaries over the "(", then drop what they swallowed: one mask,
+  -- applied to the frame, filters the characters and their line numbers together
+  { text = { ch = scatter(pos, name, s), line = st.text.line }[scatter(eaten, false, rep(len(s), true))],
+    code = stack(st.code, op_code(line, rep(len(pos), stage), name, s[pos + 1], s[pos + 2], s[pos + 3])),
+    used = scatter(line, slot + 1, st.used) });
+
+-- How many passes? A pass peels exactly one layer of parentheses off *every*
+-- expression in the program simultaneously, so the answer is the deepest nesting
+-- anywhere — which is itself just a running sum over the text.
+fun nesting(t: Text) -> i64 = max(cat(sums(tally(t.ch = '(') - tally(t.ch = ')')), [0]));
+
+fun reduce_all(t: Text) -> Pass =
+  fold(reduce, { text = t, code = no_code(), used = zeros(line_count(t)) }, iota(nesting(t)));
+
+-- ──────────────── phase 2 — statements, blocks, and program order ────────────────
+-- With every expression reduced to a single atom, each remaining statement is
+-- found by an *anchor*: ":=" an assignment, "while(" or "if(" a header, "{" and
+-- "}" a block's two ends, "!" the exit. Each anchor is a column of positions,
+-- and each field of each statement is one gather at a fixed offset from it — so
+-- a header's condition "a o b" comes out as three parallel columns, never a
+-- triple, and no statement is ever parsed on its own.
+
+fun lower(src: [u8]) -> Code = (
+  let done  = reduce_all(text_of(src));
+  let ch    = done.text.ch;
+  let line  = done.text.line;
+  let ended = len(src);                                        -- a stage later than every pass
+
+  -- Blocks. "{" opens one and "}" closes one; at any single nesting depth the
+  -- k-th "{" is closed by the k-th "}", so ordering opens and closes each by
+  -- (depth, position) lines them up pairwise. No stack, no scan, no recursion.
+  let opens  = which(ch = '{');
+  let closes = which(ch = '}');
+  let nblk   = len(opens);                                     -- block ids are 0.. in source order
+  let depth  = sums(tally(ch = '{') - tally(ch = '}'));
+  let by_open  = order_by([opens, depth[opens]]);
+  let by_close = order_by([closes, depth[closes] + 1]);
+  let owner    = scatter(by_close, by_open, zeros(len(closes)));   -- the block each "}" ends
+
+  -- Headers. Both spellings anchor on their "(", after which the condition is
+  -- three characters at fixed offsets — one gather per column.
+  let whiles = which(matches("while(", ch));
+  let ifs    = which(matches("if(", ch));
+  let hdr    = cat(whiles + 5, ifs + 2);                       -- past "while" / past "if"
+  let looping = cat(rep(len(whiles), true), rep(len(ifs), false));
+  let blk_on_line = lookup(line[opens], iota(nblk), line_count(done.text));
+  let hdr_blk = blk_on_line[line[hdr]];                        -- the block each header opens
+  let is_loop = lookup_bit(hdr_blk, looping, nblk);            -- which blocks are loops
+
+  -- Assignments and the exit, likewise: "x:=A" and "!v".
+  let asg  = which(matches(":=", ch));
+  let bang = which(ch = '!');
+
+  -- Only while blocks get a label at the top and a jump back to it, so those two
+  -- batches are the rows where the loop mask holds.
+  let w = which(looping); let c = which(is_loop[owner]);
+
+  -- The whole program, in six more batches stacked onto phase 1's ops. They are
+  -- built in no particular order — `in_order` is what sorts that out. Where a
+  -- line carries two instructions, stage 0 goes before stage 1.
+  in_order(fold(stack, done.code, [
+    set_code(line[asg], rep(len(asg), ended), ch[asg - 1], ch[asg + 2]),
+    halt_code(line[bang], zeros(len(bang)), ch[bang + 1]),
+    label_code(line[hdr][w], zeros(len(w)), hdr_blk[w], true),          -- "L<n>_top:"
+    branch_code(line[hdr], rep(len(hdr), 1), ch[hdr + 1], ch[hdr + 2], ch[hdr + 3], hdr_blk),
+    jump_code(line[closes][c], zeros(len(c)), owner[c]),                -- "b L<n>_top"
+    label_code(line[closes], rep(len(closes), 1), owner, false)])));    -- "L<n>_end:"
+
+-- ────────────────────── phase 3 — codegen, all at once ──────────────────────
+-- Small lookup tables turn a character into a fact, and indexing one by a whole
+-- column applies it to every instruction at once. Each *kind* of assembly is
+-- then rendered for the entire program as a column of strings, and a single
+-- gather gives each instruction its own.
+
+let slots   = lookup(ord(cat(letters, temps)), iota(52), 256); -- variable -> frame slot
+let arith   = lookup(ord(operators), iota(4), 256);            -- + - * / -> add sub mul sdiv
+let negated = lookup(ord("<>="), iota(3), 256);                -- < > = -> ge le ne (the negation)
+let decimal = map(std.itoa, iota(512));                        -- k -> "k"
+
+fun offsets(atom: [u8]) -> [[u8]] = decimal[slots[ord(atom)] * 8];
+fun loads(reg: [u8], atom: [u8], n: i64) -> [[u8]] = (          -- constant -> mov, variable -> ldr
+  let mov = paste([rep(n, concat(["\tmov ", reg, ", #"])), singles(atom), rep(n, "\n")]);
+  let ldr = paste([rep(n, concat(["\tldr ", reg, ", [x28, #"])), offsets(atom), rep(n, "]\n")]);
+  select(member(digits, atom), mov, ldr));
+fun stores(dst: [u8], n: i64) -> [[u8]] = paste([rep(n, "\tstr x0, [x28, #"), offsets(dst), rep(n, "]\n")]);
+fun applied(f: [u8], n: i64) -> [[u8]] = paste([rep(n, "\t"), (["add", "sub", "mul", "sdiv"])[arith[ord(f)]], rep(n, " x0, x0, x1\n")]);
+fun label_of(blk: [i64], top: [bit], n: i64) -> [[u8]] = paste([rep(n, "L"), decimal[blk], select(top, rep(n, "_top"), rep(n, "_end"))]);
+
+fun codegen(p: Code) -> [u8] = (
+  let n = len(p.line);
+  -- the whole program rendered six times over, one column of strings per kind
+  let set    = paste([loads("x0", p.x, n), stores(p.dst, n)]);
+  let op     = paste([loads("x0", p.x, n), loads("x1", p.y, n), applied(p.f, n), stores(p.dst, n)]);
+  let label  = paste([label_of(p.blk, p.top, n), rep(n, ":\n")]);
+  let branch = paste([loads("x0", p.x, n), loads("x1", p.y, n), rep(n, "\tcmp x0, x1\n\tb."), (["ge", "le", "ne"])[negated[ord(p.f)]], rep(n, " "), label_of(p.blk, p.top, n), rep(n, "\n")]);
+  let jump   = paste([rep(n, "\tb "), label_of(p.blk, p.top, n), rep(n, "\n")]);
+  let halt   = paste([loads("x0", p.x, n), rep(n, "\tmov x8, #93\n\tsvc #0\n")]);
+  -- Six columns of n laid end to end; instruction i's own rendering sits at
+  -- kind[i] * n + i, so one gather selects the entire program's assembly.
+  concat(fold(cat, set, [op, label, branch, jump, halt])[p.kind * n + iota(n)]));
+
+fun compile(src: [u8]) -> [u8] = concat([
+  ".text\n.globl _start\n_start:\n\tadrp x28, vars\n\tadd x28, x28, :lo12:vars\n",
+  codegen(lower(src)),
+  ".bss\nvars: .skip 416\n"]);                                 -- 52 slots * 8 bytes
+
+-- demo: sum i for i in 0..8 where i < 5  ->  0+1+2+3+4 = 10
+let demo = join("\n", ["s := 0", "i := 0", "while (i < 9) {", "if (i < 5) {", "s := (s + i)", "}", "i := (i + 1)", "}", "! s"]);
+pub let instructions = len(lower(demo).kind);                   -- how many instructions
+pub let asm          = compile(demo);
+
+-- Driver: compile the .src named by the last argument (or the demo above, if
+-- none) to /tmp/langcc.s, then assemble + link it via io.spawn into a native
+-- aarch64 executable at /tmp/langcc.
+--   snel run examples/lang.sn examples/sum.src ; /tmp/langcc; echo $?
+pub fun main(io: {
+  read:  fun([u8]) -> [u8],
+  write: fun([u8], [u8]) -> nil,
+  args:  fun() -> [[u8]],
+  spawn: fun([u8], [[u8]], [u8], [[u8]]) -> [u8]
+}) -> [u8] = (
+  let args = io.args();                                        -- ["run", "lang.sn", <src>?]
+  let src = if len(args) > 2 then io.read(last(args)) else demo;
+  let _ = io.write("/tmp/langcc.s", compile(src));
+  let _ = io.spawn("as", ["/tmp/langcc.s", "-o", "/tmp/langcc.o"], "", []);
+  let _ = io.spawn("ld", ["/tmp/langcc.o", "-o", "/tmp/langcc"], "", []);
+  "compiled -> /tmp/langcc (run it; its exit code is the result)");

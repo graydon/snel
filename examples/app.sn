@@ -1,0 +1,16 @@
+-- A unit that is both a library and an app. Nothing has ambient `io`: the CLI
+-- calls `main(io)` with the io capability, and `main` declares exactly the io
+-- fields it uses (width subtyping keeps it least-privilege).
+--
+--   snel run app.sn      -- calls main(io): writes then returns "hello, world"
+--   use app              -- imports { greet, main } as pure values
+
+-- pure: no capability needed
+pub fun greet(name: [u8]) -> [u8] = cat("hello, ", name);
+
+-- the entrypoint: io enters here and nowhere else
+pub fun main(io: { write: fun([u8], [u8]) -> nil }) -> [u8] = (
+  let msg = greet("world");
+  let _ = io.write("/tmp/snel-greeting.txt", msg);
+  msg
+);

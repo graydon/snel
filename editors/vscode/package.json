@@ -1,0 +1,63 @@
+{
+  "name": "snel",
+  "displayName": "Snel",
+  "description": "Syntax highlighting and LSP client for the Snel language",
+  "version": "0.1.0",
+  "publisher": "snel",
+  "engines": {
+    "vscode": "^1.82.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onLanguage:snel"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "snel",
+        "aliases": [
+          "Snel"
+        ],
+        "extensions": [
+          ".sn",
+          ".sni"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "snel",
+        "scopeName": "source.snel",
+        "path": "./syntaxes/snel.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "Snel",
+      "properties": {
+        "snel.serverPath": {
+          "type": "string",
+          "default": "snel",
+          "description": "Path to the Snel interpreter."
+        },
+        "snel.enableServer": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run `snel lsp` for diagnostics."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "snel.restartServer",
+        "title": "Snel: Restart Language Server"
+      }
+    ]
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  }
+}

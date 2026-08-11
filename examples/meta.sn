@@ -1,0 +1,27 @@
+-- Metaprogramming: Snel code is data. `parse` turns source into a vector of
+-- declaration AST-tabs; ordinary vector and tab operations inspect them; and
+-- `unparse` turns them back into source. No special forms — just data.
+
+let src = join(";\n", [
+  "let a = 1",
+  "fun sq(n: i64) -> i64 = n * n",
+  "typ pos = i64 where fun(x: i64) -> bit = x > 0",
+  "let b = a + 2"
+]);
+
+-- source -> a vector of declaration nodes (each a tab tagged by its kind)
+let decls = parse(src);
+
+-- the kind of each top-level declaration (`fun` desugars to `let`)
+pub let kinds = map(fun(d: {}) -> [u8] = get(d, "n"), decls);   -- ["let","let","typ","let"]
+
+-- the name each declaration binds
+pub let names = map(fun(d: {}) -> [u8] = get(d, "x"), decls);   -- ["a","sq","pos","b"]
+
+-- how many declarations of each kind, via group
+pub let bykind = (
+  let g = group({ k = kinds }, :k);
+  { kind = g.k, n = map(fun(rows: {k: [[u8]]}) -> i64 = len(rows.k), g.rows) });
+
+-- the AST is fully first-class: round-trip source -> AST -> binary -> AST -> source
+pub let recovered = unparse(decode(encode(decls)))

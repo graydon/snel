@@ -1,0 +1,151 @@
+-- Snel tour: one form per feature.
+
+-- scalars
+let a = 2 + 3 * 4;           -- 14 : i64
+let b = 1.5 / 0.5;           -- 3.0 : f64
+let s = "hello";             -- str = [u8]; prints as text
+let k = :label;              -- sym (atomic label)
+let byte = 'A';              -- u8 from an ascii char; prints 'A'
+let hx = 0xff;               -- 255 : i64 from a hex literal (0b1010, 1_000 also work)
+
+-- vectors, nil, masks
+let v = [3, 1, nil, 7, 5];   -- [i64?]
+let m = v > 2;               -- :10011 : [bit]  (total compare; nil orders least)
+let w = v[m];                -- [3,7,5]
+let u = v[[0, 3]];           -- [3,7]
+let z = select(m, v, 0);     -- vectorized select: [3,0,0,7,5] with nil slot -> 0
+let ix = iota(len(v))[m];    -- [0,3,4]
+
+-- functions (pure, non-recursive; fun decl is sugar for let)
+fun scale(x: [i64], k: i64) -> [i64] = x * k;
+let doubled = scale([1,2,3], 2);
+let total = fold(fun(acc: i64, x: i64) -> i64 = acc + x, 0, doubled);
+
+-- sequence expression: local bindings scoped to the block, value is the last.
+-- `do … end` is the same block as `( … )`.
+let sq = do let x = 3.0; let y = 4.0; x * x + y * y end;   -- 25.0
+
+-- predicate subtypes
+typ pos = i64 where fun(x: i64) -> bit = x > 0;
+let p: pos = 5;              -- predicate checked at ascription
+let ok = 5 is pos;           -- dynamic test = run predicate
+
+-- `where` is optional: a bare `typ` just names a type, which is the usual
+-- reason to want one — a signature can say `Frame` instead of the whole record.
+typ Frame = { ch: [u8], line: [i64] };
+fun widths(f: Frame) -> [i64] = f.line - shift(-1, 0, f.line);
+
+-- unions (prims only; no elementwise arith on union columns)
+typ num = i64 | f64;
+let mixed: [num] = [1, 2.5, 3];
+let ints = mixed[mixed is i64];
+
+-- tables
+let t = { name = ["ada", "bob", "cy"], age = [36, 41, 29] };
+let adults = t[t.age > 30];
+let ages = t.age;
+let byage = t[grade(t.age)]; -- sort rows by age
+
+-- group / aggregate
+let g = group(t, :age);      -- { age = [i64], rows = [tab] }
+let n = sum(t.age > 30);     -- count via mask sum
+
+-- a tour of the builtin repertoire (bulk ops are where time is spent)
+let d = [3, 1, 4, 1, 5, 9];
+let reductions = [sum(d), prod(d), min(d), max(d)];  -- [23, 540, 1, 9]
+let structure = { rv = rev(d), tk = take(2, d), dp = drop(4, d),
+                  hd = first(d), tl = last(d), uniq = distinct(d) };
+let idxs = which(d > 3);             -- [2, 4, 5]  (indices where d > 3)
+let present = in(4, d);              -- true
+let runsum = scan(fun(a: i64, x: i64) -> i64 = a + x, 0, d);  -- [3,4,8,9,14,23]
+let paired = map2(fun(a: i64, b: i64) -> i64 = a * b, [1,2,3], [4,5,6]); -- [4,10,18]
+let big = filter(fun(x: i64) -> bit = x > 3, d);  -- [4, 5, 9]
+let roots = sqrt([4.0, 9.0, 16.0]); -- [2.0, 3.0, 4.0]
+
+-- prefix scans, a constant column, element and neighbour access, and scatter
+-- (the inverse of the v[ix] gather). These ops take the vector last, so they
+-- also read left-to-right through the pipe: `d |> at(2)`, `d |> shift(1, 0)`.
+let scans  = { run = sums(d), fac = prods(iota(5) + 1) };  -- [3,4,8,9,14,23] / [1,2,6,24,120]
+let filled = rep(4, 7);              -- [7, 7, 7, 7]
+let elem   = at(2, d);               -- 4  (the element at index 2)
+let win    = shift(1, 0, d);         -- [1,4,1,5,9,0]  (each neighbour to the right)
+let amend  = scatter([0, 5], [0, 0], d);  -- d with positions 0 and 5 set to 0
+let picked = select(d > 3, d, 0);    -- [0,0,4,0,5,9]  (keep where d>3, else 0)
+
+-- modules (sugar over funs + tabs), parametric
+mod stats(eps: f64) {
+  pub fun near(x: f64, y: f64) -> bit = abs(x - y) < eps;
+  fun sq(x: f64) -> f64 = x * x;
+  pub fun mean(v: [f64]) -> f64 = sum(v) / itof(len(v))
+};
+let st = stats(0.001);
+let close = st.near(1.0, 1.0005);
+
+-- try/else transactions
+let safe = try 1 / 0 else -1;
+fun chk(x: i64) -> i64 = if x < 0 then err "negative" else x;
+let got = try chk(-4) else 0;
+
+-- text: strings are [u8], so the vector ops just work on them; str is a
+-- refinement ([u8] valid utf8), sym an atomic label
+let is_str = "hello" is str;         -- true
+let up = "hello"["hello" > 'n'];      -- byte filter -> "o" (bytes past 'n')
+let parts = split(",", "a,b,c");     -- ["a", "b", "c"]  (a [[u8]])
+let joined = join("/", parts);       -- "a/b/c"
+let bs = "AB";                       -- [u8]; its bytes:
+let firstbyte = "AB"[[0]];           -- "A" (byte-index a string)
+
+-- modules loaded from another file with `use` (chases text.sni then text.sn)
+use text;
+let nfields = text.fields("x;y;z", ";");  -- 3
+let hasfoo = text.has("seafood", "foo");  -- true
+
+-- ============================================================
+-- types: what the static checker proves, and what runtime coercion decides
+-- ============================================================
+
+-- The checker infers a type for every expression and checks every application:
+-- the callee must be a function and each argument a subtype of its parameter.
+-- These forms are rejected *before* running (shown as comments so the tour
+-- still runs):
+--   scale("hi", 2)     -- argument 1 is [u8], expected [i64]
+--   (5)(3)             -- cannot call a value of type i64
+--   t.missing          -- record has no such field
+--   fun() -> bit = 3   -- body is i64, declared return is bit
+--   fun(x: fun(nil)->nil)->nil = x(x)   -- x(x) is untypeable: no recursion
+
+-- ascription (e : T) checks/normalizes e against T
+let asc = ([1, 2, 3] : [i64]);
+let widen = (1 : num);                    -- i64 fits the union i64|f64
+
+-- T? admits nil (T | nil)
+let maybe: i64? = 7;
+let absent: i64? = nil;
+
+-- `is` has three shapes: scalar test -> bit; a vec against a *scalar* element
+-- type tests elementwise -> [bit]; a vec against a *vector* type (str) tests
+-- the whole value.
+let is1 = 5 is i64;                        -- true
+let is2 = [1, nil, 2] is i64;             -- :101  (nil is not i64)
+let is3 = "hi" is str;                     -- true
+
+-- Refinement subtyping is decided at runtime: a predicate can only run on an
+-- actual value. Statically pos <= i64, so a pos flows where i64 is wanted for
+-- free; the other direction runs the predicate at the coercion point.
+fun needs_i64(x: i64) -> i64 = x + 1;
+let up_ok = needs_i64(p);                  -- p : pos used as i64 (static, no check)
+let narrow: pos = 5;                       -- coerced to pos: predicate 5 > 0 runs
+let guarded = try (0 : pos) else -1;       -- 0 fails pos at runtime -> -1
+
+-- function types are first class (this f(f(x)) is not self-application)
+fun apply2(f: fun(i64) -> i64, x: i64) -> i64 = f(f(x));
+let twice = apply2(fun(n: i64) -> i64 = n + 10, 1);  -- 21
+
+-- width subtyping: a wider record satisfies a narrower record type
+fun norm(pt: { x: f64, y: f64 }) -> f64 = abs(pt.x) + abs(pt.y);
+let wide = { x = 3.0, y = -4.0, tag = "here" };      -- extra field `tag`
+let dd = norm(wide);                       -- 7.0 ; the extra field is ignored
+
+-- reflection: the environment, and a closure's code, as ordinary tabs
+let scope = locals();                         -- { a = 14, b = 3.0, ... } the whole env
+let looked = reflect(scale)                -- { params, ret, body, env } of `scale`

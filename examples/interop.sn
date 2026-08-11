@@ -1,0 +1,28 @@
+-- Interop with the outside world: JSON (which nests) and CSV (which does not).
+-- Both directions are builtins, so exchanging data needs no library.
+--
+--   snel run examples/interop.sn
+
+-- A table is a tab of equal-length columns — the natural CSV shape.
+let people = { name = ["ada", "bob", "cy"], age = [36, 41, 29], member = [true, false, true] };
+
+pub let as_csv = tocsv(people);          -- header row, then one row per person
+-- Reading back infers each column: all-integer -> [i64], all-numeric -> [f64],
+-- else [[u8]]. CSV is untyped text and has no bit, so `member` returns as
+-- strings; numbers survive exactly.
+pub let from_csv = fromcsv(as_csv);
+pub let csv_roundtrips = all(fromcsv(as_csv).age = people.age);
+
+-- JSON nests, so it carries the whole value, not just a flat table
+pub let as_json = tojson(people);
+pub let nested = tojson({ id = 7, tags = ["a", "b"], meta = { ok = true, score = 1.5 } });
+
+-- Reading JSON gives ordinary values: index, project, and reduce as usual
+let doc = fromjson("{\"xs\":[3,1,4,1,5],\"label\":\"digits\"}");
+pub let label = (doc.label : [u8]);
+pub let total = sum((doc.xs : [i64]));                   -- 14
+pub let big   = (doc.xs : [i64])[(doc.xs : [i64]) > 2];  -- [3, 4, 5]
+
+-- A CSV column with blanks reads as nil, so the usual nil-aware ops apply
+let sparse = fromcsv("n,label\n1,a\n,b\n3,c\n");
+pub let present = sum(not(isnil((sparse.n : [i64?]))))   -- 2
