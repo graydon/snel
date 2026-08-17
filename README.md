@@ -45,6 +45,13 @@ about and wanted a playground to try out in:
      occasionally convenient, so I left one scalar `if/then/else` convenience
      form in, but they will always be slower than masks/selects; that's the
      whole thing with vectorization!
+
+	 Note: this is _not_ about vectorization in the "SIMD" or "parallelism"
+	 senses. There might be a little bit of that in each interpreter step,
+	 if LLVM auto-vectorizes at that level. But that's not the point. The
+	 point is to try to _amortize the overhead of interpretation_ by having
+	 each interpreter-step be a whole native inner loop and do lots of work,
+	 so you can get compiler-like speed with interpreter-like pragmatics.
   
      I [gave a talk](https://venge.net/graydon/talks/VectorizedInterpretersTalk-2023-05-12.pdf)
      about this a while ago and part of that was speculation: that vectorized
