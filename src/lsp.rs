@@ -139,7 +139,7 @@ fn hover_text(word: &str) -> Option<String> {
     let kw = [
         ("let", "bind a name: `let x = e;`"),
         ("fun", "function literal or declaration: `fun f(x: T) -> T = e;`"),
-        ("typ", "named type: `typ n = T;`, or a predicate subtype `typ n = T where p;`"),
+        ("type", "named type: `type n = T;`, or a predicate subtype `type n = T where p;`"),
         ("mod", "module: sugar over a fun returning a tab of its `pub` names"),
         ("pub", "export this declaration from the unit"),
         ("use", "import another unit; resolved and typed at check time"),
@@ -149,7 +149,7 @@ fn hover_text(word: &str) -> Option<String> {
         ("try", "`try e else f` — recover from `err` (values roll back, effects do not)"),
         ("err", "raise an error, caught by an enclosing `try`"),
         ("is", "type test: scalar -> bit, vec vs a scalar type -> [bit]"),
-        ("where", "attaches a predicate to a `typ`"),
+        ("where", "attaches a predicate to a `type`"),
         ("nil", "the absent value"),
         ("true", "bit literal"),
         ("false", "bit literal"),

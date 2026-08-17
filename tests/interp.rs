@@ -92,7 +92,7 @@ fn tables_and_group() {
 
 #[test]
 fn predicate_subtypes() {
-    let s = "typ pos = i64 where fun(x: i64) -> bit = x > 0; ";
+    let s = "type pos = i64 where fun(x: i64) -> bit = x > 0; ";
     assert_eq!(eval(&format!("{}pub let r = 5 is pos", s)), "{ r = true }");
     assert_eq!(eval(&format!("{}pub let r = 0 is pos", s)), "{ r = false }");
     // ascription failure is an error
@@ -128,7 +128,7 @@ fn elementwise_typing() {
     assert_eq!(eval("fun f(v: [i64?]) -> [bit] = v > 2; pub let r = f([3,1,nil])"), "{ r = :100 }");
     // A genuine multi-case union operand stays gradual (no false rejection);
     // comparison on it is allowed and runs, arithmetic is left to runtime.
-    assert_eq!(eval("typ num = i64|f64; let m: [num] = [1, 2.5]; pub let r = m > 0"), "{ r = :11 }");
+    assert_eq!(eval("type num = i64|f64; let m: [num] = [1, 2.5]; pub let r = m > 0"), "{ r = :11 }");
 }
 
 #[test]
@@ -251,12 +251,12 @@ fn str_sym_refinement_types() {
 
 #[test]
 fn named_types_compose_and_index() {
-    // A `typ` body may name another `typ`. The inner name has to reach the
+    // A `type` body may name another `type`. The inner name has to reach the
     // *closure* that coerces against the outer one, so it rides along in the
     // captured env (was: eval error "unbound type `Inner`").
-    // (`where` is optional — a bare `typ` is a plain alias)
-    let nested = "typ Inner = { a: [i64] };\
-                  typ Outer = { i: Inner, n: i64 };\
+    // (`where` is optional — a bare `type` is a plain alias)
+    let nested = "type Inner = { a: [i64] };\
+                  type Outer = { i: Inner, n: i64 };\
                   fun mk() -> Outer = { i = { a = [1] }, n = 0 };";
     assert_eq!(eval(&format!("{nested} pub let v = mk()")), "{ v = { i = { a = [1] }, n = 0 } }");
     // ...including when the closure is reached indirectly, through a builtin
@@ -268,35 +268,35 @@ fn named_types_compose_and_index() {
         "{ v = { i = { a = [1] }, n = 3 } }"
     );
 
-    // `e[i]` sees through a `typ` alias, the way `e.x` always has. The result is
+    // `e[i]` sees through a `type` alias, the way `e.x` always has. The result is
     // the *base* type, since indexing need not preserve the refinement.
     assert_eq!(
-        eval("typ Frame = { ch: [u8], ln: [i64] };\
+        eval("type Frame = { ch: [u8], ln: [i64] };\
               fun keep(f: Frame, m: [bit]) -> Frame = f[m];\
               pub let v = keep({ ch = \"abcd\", ln = [0, 0, 1, 1] }, \"abcd\" <> 'b')"),
         "{ v = { ch = \"acd\", ln = [0, 1, 1] } }"
     );
     assert_eq!(
-        eval("typ Nums = [i64]; fun pick(v: Nums, ix: [i64]) -> [i64] = v[ix];\
+        eval("type Nums = [i64]; fun pick(v: Nums, ix: [i64]) -> [i64] = v[ix];\
               pub let v = pick([9, 8, 7], [2, 0])"),
         "{ v = [7, 9] }"
     );
     // an alias names a type and nothing else: same values, and `is` always holds
-    assert_eq!(eval("typ N = i64; pub let a = 5 is N"), "{ a = true }");
+    assert_eq!(eval("type N = i64; pub let a = 5 is N"), "{ a = true }");
     // ...and it prints back as an alias, not as the predicate it desugars to
-    assert_eq!(parse_print("typ N = i64;"), "typ N = i64;\n");
-    assert_eq!(parse_print("typ R = { a: [i64] };"), "typ R = {a: [i64]};\n");
+    assert_eq!(parse_print("type N = i64;"), "type N = i64;\n");
+    assert_eq!(parse_print("type R = { a: [i64] };"), "type R = {a: [i64]};\n");
     assert_eq!(
-        parse_print("typ pos = i64 where fun(x: i64) -> bit = x > 0;"),
-        "typ pos = i64 where fun(x: i64) -> bit = x > 0;\n"
+        parse_print("type pos = i64 where fun(x: i64) -> bit = x > 0;"),
+        "type pos = i64 where fun(x: i64) -> bit = x > 0;\n"
     );
-    assert_eq!(eval("typ N = i64; pub let a = (5 : N)"), "{ a = 5 }");
-    assert_eq!(eval("typ F = fun(i64) -> i64; fun ap(f: F, x: i64) -> i64 = f(x);\
+    assert_eq!(eval("type N = i64; pub let a = (5 : N)"), "{ a = 5 }");
+    assert_eq!(eval("type F = fun(i64) -> i64; fun ap(f: F, x: i64) -> i64 = f(x);\
                      pub let a = ap(fun(z: i64) -> i64 = z + 1, 41)"), "{ a = 42 }");
     // the built-in refinements index too
     assert_eq!(eval("fun two(s: str) -> [u8] = s[[0, 1]]; pub let v = two(\"hello\")"), "{ v = \"he\" }");
     // and a non-indexable type is still rejected
-    assert!(eval("typ N = i64; fun bad(x: N) -> i64 = x[0]; pub let v = bad(3)")
+    assert!(eval("type N = i64; fun bad(x: N) -> i64 = x[0]; pub let v = bad(3)")
         .starts_with("ERR"));
 }
 
@@ -369,7 +369,7 @@ fn fuzzer_found_regressions() {
     // `parse` builtin made reachable at runtime from any string.
     for bad in ["[nil", "[1", "[", "(", "{", "let x = [1", "[1,", "fun f(x: i64) -> ",
                 "try 1 else", "if true then 1", "{ a =", "(1 :", "mod m {",
-                "typ T = i64 where"] {
+                "type T = i64 where"] {
         assert!(parse::parse_unit(bad).is_err(), "expected a parse error for {bad:?}");
         let quoted = bad.replace('\\', "\\\\").replace('"', "\\\"");
         assert_eq!(expr(&format!("try unparse(parse(\"{quoted}\")) else \"ERR\"")), "\"ERR\"");

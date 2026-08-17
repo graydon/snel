@@ -15,7 +15,7 @@ pub enum Ty {
     Union(Vec<Ty>), // flattened, deduped, source order
     Tab(Vec<(Sym, Ty)>),
     Fun(Vec<Ty>, Box<Ty>),
-    Name(Sym), // named predicate subtype; resolved via the checker's typ table
+    Name(Sym), // named predicate subtype; resolved via the checker's type table
 }
 
 impl Ty {
@@ -53,7 +53,7 @@ pub enum Ast {
     As(Box<Node>, Ty), // ascription (e : T); checks e against T
     Seq(Vec<Node>), // declarations then final expression; value = last
     Let { x: Sym, ty: Option<Ty>, e: Box<Node>, doc: Option<Bytes>, public: bool },
-    Typ { x: Sym, base: Ty, pred: Box<Node>, doc: Option<Bytes>, public: bool },
+    Type { x: Sym, base: Ty, pred: Box<Node>, doc: Option<Bytes>, public: bool },
     // `use x` loads x.sn; `use x = "url"` loads a remote unit (optional feature)
     Use { x: Sym, url: Option<Bytes>, doc: Option<Bytes> },
 }

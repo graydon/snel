@@ -117,7 +117,7 @@ typedef enum {
     A_AS,
     A_SEQ,
     A_LET,
-    A_TYP,
+    A_TYPE,
     A_USE
 } AKind;
 
@@ -126,7 +126,7 @@ struct Node {
     AKind k;
     uint32_t lo, hi; // source span
     Val lit;         // A_LIT
-    Bin name;        // A_VAR/A_PROJ field/A_LET-A_TYP-A_USE name
+    Bin name;        // A_VAR/A_PROJ field/A_LET-A_TYPE-A_USE name
     Node *a, *b, *c; // children (roles per kind)
     Node *kids;
     size_t nkids; // A_APP args, A_VEC elems, A_SEQ decls, A_TAB vals

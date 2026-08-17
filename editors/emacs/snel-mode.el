@@ -10,7 +10,7 @@
 ;;; Code:
 
 (defvar snel-keywords
-  '("let" "fun" "typ" "mod" "pub" "use" "do" "end"
+  '("let" "fun" "type" "mod" "pub" "use" "do" "end"
     "if" "then" "else" "try" "err" "is" "where")
   "Keywords of the Snel language.")
 
@@ -42,9 +42,9 @@
       (,co . font-lock-constant-face)
       (,ty . font-lock-type-face)
       (,bi . font-lock-builtin-face)
-      ;; declaration names: `fun f(`, `let x`, `typ t`
+      ;; declaration names: `fun f(`, `let x`, `type t`
       ("\\_<fun\\_>[ \t]+\\([a-zA-Z_][a-zA-Z0-9_]*\\)" 1 font-lock-function-name-face)
-      ("\\_<\\(?:let\\|typ\\|mod\\|use\\)\\_>[ \t]+\\([a-zA-Z_][a-zA-Z0-9_]*\\)"
+      ("\\_<\\(?:let\\|type\\|mod\\|use\\)\\_>[ \t]+\\([a-zA-Z_][a-zA-Z0-9_]*\\)"
        1 font-lock-variable-name-face)
       ;; :1011 bit vector, :name symbol
       (":[01][01_]*" . font-lock-constant-face)

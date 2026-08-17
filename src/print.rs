@@ -397,7 +397,7 @@ fn doc_prefix(doc: &Option<Bytes>) -> String {
     }
 }
 
-// Does this predicate look like the one `typ x = T` (no `where`) desugars to —
+// Does this predicate look like the one `type x = T` (no `where`) desugars to —
 // `fun(_: T) -> bit = true`? Matched structurally, so no AST/format change is
 // needed to remember that the source omitted the clause.
 fn is_always_true(pred: &Node, base: &Ty) -> bool {
@@ -535,9 +535,9 @@ fn fmt_ast(a: &Ast) -> (String, u8) {
             ),
             0,
         ),
-        Ast::Typ { x, base, pred, doc, public } => (
+        Ast::Type { x, base, pred, doc, public } => (
             format!(
-                "{}{}typ {:?} = {}{}",
+                "{}{}type {:?} = {}{}",
                 doc_prefix(doc),
                 if *public { "pub " } else { "" },
                 x,

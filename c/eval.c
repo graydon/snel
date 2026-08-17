@@ -87,7 +87,7 @@ static void walk_seq(const Node *n, Syms *bound, Syms *out) {
                 ty_names(&d->ty, bound, out);
             walk(d->a, bound, out);
             syms_push(bound, bin_clone(d->name));
-        } else if (d->k == A_TYP) {
+        } else if (d->k == A_TYPE) {
             ty_names(&d->ty, bound, out);
             walk(d->a, bound, out);
             syms_push(bound, bin_clone(d->name));
@@ -155,7 +155,7 @@ static void walk(const Node *n, Syms *bound, Syms *out) {
                 ty_names(&n->ty, bound, out);
             walk(n->a, bound, out);
             break;
-        case A_TYP:
+        case A_TYPE:
             ty_names(&n->ty, bound, out);
             walk(n->a, bound, out);
             break;
@@ -173,13 +173,13 @@ static void free_vars(const Node *fun, Syms *out) {
     walk(fun->a, &bound, out);
 }
 
-// The type names a `typ` value's base refers to (nothing, for anything else).
-// A `typ` evaluates to a tab of its base type and its predicate; that base may
-// name other `typ`s, and those have to travel with it into a closure.
-static void typ_deps(const Val *v, Syms *out) {
+// The type names a `type` value's base refers to (nothing, for anything else).
+// A `type` evaluates to a tab of its base type and its predicate; that base may
+// name other `type`s, and those have to travel with it into a closure.
+static void type_deps(const Val *v, Syms *out) {
     if (v->k != V_TAB)
         return;
-    Val *b = tab_get(v->u.tab, (const uint8_t *)"typ", 3);
+    Val *b = tab_get(v->u.tab, (const uint8_t *)"type", 4);
     Val *p = tab_get(v->u.tab, (const uint8_t *)"pred", 4);
     Ty base;
     if (!b || !p || !val_to_ty(b, &base))
@@ -247,12 +247,12 @@ static bool decl_step(Cx *cx, Tab **env, const Node *d, Val *out) {
             *out = v;
             return true;
         }
-        case A_TYP: {
+        case A_TYPE: {
             Val p;
             if (!eval(cx, *env, d->a, &p))
                 return false;
             Tab *tt = tab_new();
-            Bin kb = bin_str("typ");
+            Bin kb = bin_str("type");
             tab_bind(tt, kb, ty_to_val(&d->ty), NULL);
             Bin pb = bin_str("pred");
             tab_bind(tt, pb, p, NULL);
@@ -322,7 +322,7 @@ static int native_refinement(const Bin *n, const Val *v) {
     free(b);
     return r;
 }
-static bool resolve_typ(Cx *cx, Tab *env, const Bin *n, Ty *base, Val *pred, uint32_t sp);
+static bool resolve_type(Cx *cx, Tab *env, const Bin *n, Ty *base, Val *pred, uint32_t sp);
 
 // Does T denote a vector type (so `is` applies to the whole value)?
 static bool is_vec_type(Cx *cx, Tab *env, const Ty *t, uint32_t sp, bool *out) {
@@ -337,18 +337,18 @@ static bool is_vec_type(Cx *cx, Tab *env, const Ty *t, uint32_t sp, bool *out) {
     if (t->k == T_NAME) {
         Ty base;
         Val pred;
-        if (!resolve_typ(cx, env, &t->name, &base, &pred, sp))
+        if (!resolve_type(cx, env, &t->name, &base, &pred, sp))
             return false;
         return is_vec_type(cx, env, &base, sp, out);
     }
     *out = false;
     return true;
 }
-static bool resolve_typ(Cx *cx, Tab *env, const Bin *n, Ty *base, Val *pred, uint32_t sp) {
+static bool resolve_type(Cx *cx, Tab *env, const Bin *n, Ty *base, Val *pred, uint32_t sp) {
     Val *tv = tab_get(env, bin_bytes(n), n->len);
     if (!tv || tv->k != V_TAB)
         return efail(cx, sp, "unbound type");
-    Val *b = tab_get(tv->u.tab, (const uint8_t *)"typ", 3);
+    Val *b = tab_get(tv->u.tab, (const uint8_t *)"type", 4);
     Val *p = tab_get(tv->u.tab, (const uint8_t *)"pred", 4);
     if (!b || !p || !val_to_ty(b, base))
         return efail(cx, sp, "not a type");
@@ -397,7 +397,7 @@ static bool subtype(Cx *cx, Tab *env, const Ty *a, const Ty *b, uint32_t sp, boo
             base.n = 1;
             base.elem = calloc(1, sizeof(Ty));
             base.elem[0].k = T_U8;
-        } else if (!resolve_typ(cx, env, &a->name, &base, &pred, sp))
+        } else if (!resolve_type(cx, env, &a->name, &base, &pred, sp))
             return false;
         return subtype(cx, env, &base, b, sp, out);
     }
@@ -511,7 +511,7 @@ static bool scalar_is(Cx *cx, Tab *env, const Val *v, const Ty *t, uint32_t sp, 
             }
             Ty base;
             Val pred;
-            if (!resolve_typ(cx, env, &t->name, &base, &pred, sp))
+            if (!resolve_type(cx, env, &t->name, &base, &pred, sp))
                 return false;
             bool r;
             if (!scalar_is(cx, env, v, &base, sp, &r))
@@ -559,7 +559,7 @@ static bool strip_names(Cx *cx, Tab *env, const Ty *t, uint32_t sp, Ty *out) {
     if (t->k == T_NAME) {
         Ty base;
         Val pred;
-        if (!resolve_typ(cx, env, &t->name, &base, &pred, sp))
+        if (!resolve_type(cx, env, &t->name, &base, &pred, sp))
             return false;
         return strip_names(cx, env, &base, sp, out);
     }
@@ -633,7 +633,7 @@ static bool coerce(Cx *cx, Tab *env, Val v, const Ty *t, uint32_t sp, Val *out) 
         }
         Ty base;
         Val pred;
-        if (!resolve_typ(cx, env, &t->name, &base, &pred, sp))
+        if (!resolve_type(cx, env, &t->name, &base, &pred, sp))
             return false;
         Val cv;
         if (!coerce(cx, env, v, &base, sp, &cv))
@@ -1385,7 +1385,7 @@ static bool eval(Cx *cx, Tab *env, const Node *n, Val *out) {
         }
         case A_FUN: {
             // Capture the body's free names — and, transitively, the type names a
-            // captured `typ` refers to in its own base, so that resolving (and
+            // captured `type` refers to in its own base, so that resolving (and
             // coercing against) that type still works inside the closure. `fv`
             // grows as those deps are found, so the loop re-reads `fv.n`.
             Syms fv = {0};
@@ -1396,7 +1396,7 @@ static bool eval(Cx *cx, Tab *env, const Node *n, Val *out) {
                 if (!v)
                     continue;
                 tab_bind(cap, bin_clone(fv.v[i]), val_clone(*v), NULL);
-                typ_deps(v, &fv);
+                type_deps(v, &fv);
             }
             Clo *c = malloc(sizeof(Clo));
             c->rc = 1;
@@ -1504,7 +1504,7 @@ static bool eval(Cx *cx, Tab *env, const Node *n, Val *out) {
             return true;
         }
         case A_LET:
-        case A_TYP:
+        case A_TYPE:
         case A_USE: {
             Tab *cur = tab_retain(env);
             return decl_step(cx, &cur, n, out);
@@ -1567,7 +1567,7 @@ bool eval_program(Node *ds, size_t nds, Loader *loader, Val *out, char *errbuf, 
             free(pubs);
             return false;
         }
-        if ((ds[i].k == A_LET || ds[i].k == A_TYP) && ds[i].is_pub) {
+        if ((ds[i].k == A_LET || ds[i].k == A_TYPE) && ds[i].is_pub) {
             if (npub == pcap) {
                 pcap = pcap ? pcap * 2 : 8;
                 pubs = realloc(pubs, pcap * sizeof(Bin));

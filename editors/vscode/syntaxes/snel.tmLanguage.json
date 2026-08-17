@@ -55,7 +55,7 @@
         },
         {
           "name": "keyword.declaration.snel",
-          "match": "\\b(let|fun|typ|mod|pub|use|do|end)\\b"
+          "match": "\\b(let|fun|type|mod|pub|use|do|end)\\b"
         },
         { "name": "constant.language.snel", "match": "\\b(nil|true|false|inf|nan)\\b" },
         { "name": "keyword.operator.word.snel", "match": "\\b(and|or|not)\\b" }
@@ -79,7 +79,7 @@
           }
         },
         {
-          "match": "\\b(let|typ|mod|use)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "match": "\\b(let|type|mod|use)\\s+([A-Za-z_][A-Za-z0-9_]*)",
           "captures": {
             "1": { "name": "keyword.declaration.snel" },
             "2": { "name": "variable.other.snel" }

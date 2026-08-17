@@ -117,10 +117,10 @@ fn tyname(t: T) -> &'static str {
 
 struct Gen {
     r: Rng,
-    sc: Vec<(String, T)>, // in-scope value bindings
-    typs: Vec<(String, T)>, // `typ` names and the shape underneath
-    mods: Vec<String>,    // non-parametric module names (each has .a : i64)
-    n: usize,             // fresh-name counter
+    sc: Vec<(String, T)>,    // in-scope value bindings
+    types: Vec<(String, T)>, // `type` names and the shape underneath
+    mods: Vec<String>,       // non-parametric module names (each has .a : i64)
+    n: usize,                // fresh-name counter
     used_std: bool,
 }
 
@@ -374,7 +374,7 @@ impl Gen {
             9 => format!("({} is str)", self.gen(Str, d)),
             10 => format!("({} is sym)", self.gen(Str, d)),
             11 => {
-                let ty = self.typs.clone();
+                let ty = self.types.clone();
                 if ty.is_empty() {
                     format!("({} is i64)", self.gen(Int, d))
                 } else {
@@ -616,24 +616,24 @@ impl Gen {
                 let n = self.fresh("T");
                 let pred = self.gen(Bit, 1);
                 out.push(format!(
-                    "typ {n} = {} where fun(w: {}) -> bit = {pred};",
+                    "type {n} = {} where fun(w: {}) -> bit = {pred};",
                     tyname(base),
                     tyname(base)
                 ));
-                self.typs.push((n.clone(), base));
-                // A `typ` naming another `typ` — the composite case, whose inner
+                self.types.push((n.clone(), base));
+                // A `type` naming another `type` — the composite case, whose inner
                 // predicate is `true` so the probe tests composition itself
                 // rather than dying on a refinement.
                 if self.r.chance(2) {
                     let ok = self.fresh("T");
                     let n2 = self.fresh("T");
                     out.push(format!(
-                        "typ {ok} = {} where fun(w: {}) -> bit = true;",
+                        "type {ok} = {} where fun(w: {}) -> bit = true;",
                         tyname(base),
                         tyname(base)
                     ));
                     out.push(format!(
-                        "typ {n2} = {{ a: {ok} }} where fun(w: {{ a: {} }}) -> bit = true;",
+                        "type {n2} = {{ a: {ok} }} where fun(w: {{ a: {} }}) -> bit = true;",
                         tyname(base)
                     ));
                     let name = self.fresh("v");
@@ -651,7 +651,7 @@ impl Gen {
             14..=15 => {
                 // a union type and a mixed column through it
                 let n = self.fresh("T");
-                out.push(format!("typ {n} = i64 | f64;"));
+                out.push(format!("type {n} = i64 | f64;"));
                 let name = self.fresh("v");
                 out.push(format!(
                     "pub let {name} = ([{}, {}, {}] : [{n}]);",
@@ -734,7 +734,7 @@ pub fn program_from_bytes(b: &[u8]) -> String {
 }
 
 fn gen_with(r: Rng) -> String {
-    let mut g = Gen { r, sc: Vec::new(), typs: Vec::new(), mods: Vec::new(), n: 0, used_std: false };
+    let mut g = Gen { r, sc: Vec::new(), types: Vec::new(), mods: Vec::new(), n: 0, used_std: false };
     g.unit()
 }
 
@@ -763,7 +763,7 @@ const FEATURES: &[(&str, &str)] = &[
     ("tojson", "tojson("), ("fromjson", "fromjson("), ("tocsv", "tocsv("),
     ("fromcsv", "fromcsv("),
     // surface features
-    ("let", "let "), ("pub", "pub "), ("fun", "fun "), ("typ", "typ "),
+    ("let", "let "), ("pub", "pub "), ("fun", "fun "), ("type", "type "),
     ("mod", "mod "), ("use", "use "), ("if", "if "), ("try", "try "),
     ("err", "err "), ("is", " is "), ("ascription", " : "), ("pipe", "|>"),
     ("do-end", "do "), ("block", "(let "), ("doc-comment", "--"),

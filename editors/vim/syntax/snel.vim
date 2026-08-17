@@ -9,7 +9,7 @@ endif
 syn match   snelDocComment "^\s*--.*$"
 syn match   snelComment    "--.*$" contains=@Spell
 
-syn keyword snelKeyword let fun typ mod pub use do end
+syn keyword snelKeyword let fun type mod pub use do end
 syn keyword snelConditional if then else try err is where
 syn keyword snelBoolean true false
 syn keyword snelConstant nil inf nan

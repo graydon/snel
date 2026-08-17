@@ -111,7 +111,7 @@ pub fn eval(cx: &mut Cx, env: &Rc<Tab>, n: &Node) -> EResult {
         }
         Ast::Fun { params, ret, body } => {
             // Capture the body's free names — and, transitively, the type names a
-            // captured `typ` refers to in its own base, so that resolving (and
+            // captured `type` refers to in its own base, so that resolving (and
             // coercing against) that type still works inside the closure.
             let mut captured = Tab::default();
             let mut want = free_vars(n);
@@ -121,7 +121,7 @@ pub fn eval(cx: &mut Cx, env: &Rc<Tab>, n: &Node) -> EResult {
                 i += 1;
                 let Some(v) = env.get(x.bytes()) else { continue };
                 captured.bind(x, v.clone(), None);
-                for d in typ_deps(&v) {
+                for d in type_deps(&v) {
                     if !want.contains(&d) {
                         want.push(d);
                     }
@@ -171,7 +171,7 @@ pub fn eval(cx: &mut Cx, env: &Rc<Tab>, n: &Node) -> EResult {
             }
             Ok(last)
         }
-        Ast::Let { .. } | Ast::Typ { .. } | Ast::Use { .. } => {
+        Ast::Let { .. } | Ast::Type { .. } | Ast::Use { .. } => {
             // a lone declaration evaluates to its bound value (REPL)
             let mut cur = env.clone();
             decl_step(cx, &mut cur, n)
@@ -192,10 +192,10 @@ pub fn decl_step(cx: &mut Cx, env: &mut Rc<Tab>, d: &Node) -> EResult {
             t.bind(x.clone(), v.clone(), doc.clone());
             Ok(v)
         }
-        Ast::Typ { x, base, pred, doc, .. } => {
+        Ast::Type { x, base, pred, doc, .. } => {
             let p = eval(cx, env, pred)?;
             let mut t = Tab::default();
-            t.bind(Bytes::str("typ"), crate::wire::ty_to_val(base), None);
+            t.bind(Bytes::str("type"), crate::wire::ty_to_val(base), None);
             t.bind(Bytes::str("pred"), p, None);
             let v = Val::Tab(Rc::new(t));
             Rc::make_mut(env).bind(x.clone(), v.clone(), doc.clone());
@@ -638,10 +638,10 @@ fn reflect_closure(clo: &Clo) -> Val {
 // ---------- dynamic type tests & coercion ----------
 
 // Resolve a named type in `env` to (base type, predicate).
-fn resolve_typ(env: &Rc<Tab>, n: &Sym, sp: Span) -> Result<(Ty, Val), EErr> {
+fn resolve_type(env: &Rc<Tab>, n: &Sym, sp: Span) -> Result<(Ty, Val), EErr> {
     match env.get(n.bytes()) {
         Some(Val::Tab(t)) => {
-            let base = t.get(b"typ").and_then(crate::wire::val_to_ty);
+            let base = t.get(b"type").and_then(crate::wire::val_to_ty);
             let pred = t.get(b"pred");
             match (base, pred) {
                 (Some(b), Some(p)) => Ok((b, p.clone())),
@@ -682,7 +682,7 @@ pub fn subtype(env: &Rc<Tab>, a: &Ty, b: &Ty, sp: Span) -> Result<bool, EErr> {
             let base = if builtin_type(n.bytes()) {
                 Ty::Vec(Box::new(Ty::U8))
             } else {
-                resolve_typ(env, n, sp)?.0
+                resolve_type(env, n, sp)?.0
             };
             subtype(env, &base, b, sp)
         }
@@ -740,7 +740,7 @@ fn scalar_is(cx: &mut Cx, env: &Rc<Tab>, v: &Val, t: &Ty, sp: Span) -> Result<bo
             if let Some(ok) = native_refinement(n.bytes(), v) {
                 ok
             } else {
-                let (base, pred) = resolve_typ(env, n, sp)?;
+                let (base, pred) = resolve_type(env, n, sp)?;
                 if !scalar_is(cx, env, v, &base, sp)? {
                     false
                 } else {
@@ -793,7 +793,7 @@ fn is_vec_type(env: &Rc<Tab>, t: &Ty, sp: Span) -> Result<bool, EErr> {
     Ok(match t {
         Ty::Vec(_) => true,
         Ty::Name(n) if builtin_type(n.bytes()) => true, // str = [u8]
-        Ty::Name(n) => is_vec_type(env, &resolve_typ(env, n, sp)?.0, sp)?,
+        Ty::Name(n) => is_vec_type(env, &resolve_type(env, n, sp)?.0, sp)?,
         _ => false,
     })
 }
@@ -816,7 +816,7 @@ pub fn coerce(cx: &mut Cx, env: &Rc<Tab>, v: Val, t: &Ty, sp: Span) -> EResult {
             }
         }
         (Ty::Name(n), v) => {
-            let (base, pred) = resolve_typ(env, n, sp)?;
+            let (base, pred) = resolve_type(env, n, sp)?;
             let v = coerce(cx, env, v, &base, sp)?;
             match apply(cx, &pred, &mut [v.clone()], sp)? {
                 Val::Bit(true) => Ok(v),
@@ -887,7 +887,7 @@ fn strip_names(env: &Rc<Tab>, t: &Ty, sp: Span) -> Result<Ty, EErr> {
     Ok(match t {
         Ty::Name(n) if builtin_type(n.bytes()) => Ty::Vec(Box::new(Ty::U8)), // str represents as [u8]
         Ty::Name(n) => {
-            let (base, _) = resolve_typ(env, n, sp)?;
+            let (base, _) = resolve_type(env, n, sp)?;
             strip_names(env, &base, sp)?
         }
         Ty::Union(ts) => {
@@ -918,14 +918,14 @@ pub fn free_vars(n: &Node) -> Vec<Sym> {
     out
 }
 
-// The type names a `typ` value's base refers to (empty for anything else).
-// A `typ` evaluates to a tab of its base type and its predicate; the base may
-// name other `typ`s, and those have to travel with it into a closure.
-fn typ_deps(v: &Val) -> Vec<Sym> {
+// The type names a `type` value's base refers to (empty for anything else).
+// A `type` evaluates to a tab of its base type and its predicate; the base may
+// name other `type`s, and those have to travel with it into a closure.
+fn type_deps(v: &Val) -> Vec<Sym> {
     let mut out = Vec::new();
     if let Val::Tab(t) = v {
         if t.get(b"pred").is_some() {
-            if let Some(base) = t.get(b"typ").and_then(crate::wire::val_to_ty) {
+            if let Some(base) = t.get(b"type").and_then(crate::wire::val_to_ty) {
                 ty_names(&base, &[], &mut out);
             }
         }
@@ -1002,7 +1002,7 @@ fn walk(n: &Node, bound: &mut Vec<Sym>, out: &mut Vec<Sym>) {
                         walk(e, bound, out);
                         bound.push(x.clone());
                     }
-                    Ast::Typ { x, base, pred, .. } => {
+                    Ast::Type { x, base, pred, .. } => {
                         ty_names(base, bound, out);
                         walk(pred, bound, out);
                         bound.push(x.clone());
@@ -1019,7 +1019,7 @@ fn walk(n: &Node, bound: &mut Vec<Sym>, out: &mut Vec<Sym>) {
             }
             walk(e, bound, out);
         }
-        Ast::Typ { base, pred, .. } => {
+        Ast::Type { base, pred, .. } => {
             ty_names(base, bound, out);
             walk(pred, bound, out);
         }

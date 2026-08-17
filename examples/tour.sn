@@ -26,17 +26,17 @@ let total = fold(fun(acc: i64, x: i64) -> i64 = acc + x, 0, doubled);
 let sq = do let x = 3.0; let y = 4.0; x * x + y * y end;   -- 25.0
 
 -- predicate subtypes
-typ pos = i64 where fun(x: i64) -> bit = x > 0;
+type pos = i64 where fun(x: i64) -> bit = x > 0;
 let p: pos = 5;              -- predicate checked at ascription
 let ok = 5 is pos;           -- dynamic test = run predicate
 
--- `where` is optional: a bare `typ` just names a type, which is the usual
+-- `where` is optional: a bare `type` just names a type, which is the usual
 -- reason to want one — a signature can say `Frame` instead of the whole record.
-typ Frame = { ch: [u8], line: [i64] };
+type Frame = { ch: [u8], line: [i64] };
 fun widths(f: Frame) -> [i64] = f.line - shift(-1, 0, f.line);
 
 -- unions (prims only; no elementwise arith on union columns)
-typ num = i64 | f64;
+type num = i64 | f64;
 let mixed: [num] = [1, 2.5, 3];
 let ints = mixed[mixed is i64];
 

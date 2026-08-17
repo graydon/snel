@@ -868,7 +868,7 @@ static void put_params(Str *s, const Node *n) {
 
 bool ty_eq(const Ty *a, const Ty *b); // check.c: structural type equality
 
-// Does this predicate look like the one `typ x = T` (no `where`) desugars to —
+// Does this predicate look like the one `type x = T` (no `where`) desugars to —
 // `fun(_: T) -> bit = true`? Matched structurally, so no AST/format change is
 // needed to remember that the source omitted the clause.
 static bool is_always_true(const Node *pred, const Ty *base) {
@@ -1124,11 +1124,11 @@ static void fmt_ast(Str *s, const Node *n, int *prec) {
             }
             *prec = 0;
             break;
-        case A_TYP:
+        case A_TYPE:
             doc_prefix(s, n);
             if (n->is_pub)
                 sput(s, "pub ");
-            sput(s, "typ ");
+            sput(s, "type ");
             bin_raw(s, &n->name);
             sput(s, " = ");
             {

@@ -75,7 +75,7 @@ pub fn eval_unit(loader: &mut dyn eval::Loader, src: &str) -> Result<Val, String
     let mut cx = eval::Cx { loader };
     for d in &ds {
         eval::decl_step(&mut cx, &mut env, d).map_err(|e| fmt_err("eval", src, &e.msg, e.span.lo))?;
-        if let ast::Ast::Let { x, public: true, .. } | ast::Ast::Typ { x, public: true, .. } = &d.ast {
+        if let ast::Ast::Let { x, public: true, .. } | ast::Ast::Type { x, public: true, .. } = &d.ast {
             pubs.push(x.clone());
         }
     }

@@ -57,8 +57,8 @@ AST node.
 **Funs.** A closure holds its parameters, body, and a captured environment
 trimmed to the body's free variables — which include the *type* names its
 signature and annotations mention, and, transitively, the type names those
-types' own definitions mention (so a captured `typ` whose base names another
-`typ` still resolves inside the closure). Because there is no recursion,
+types' own definitions mention (so a captured `type` whose base names another
+`type` still resolves inside the closure). Because there is no recursion,
 captured environments are acyclic.
 
 **Representation note.** Small byte buffers and small bit vectors are stored
@@ -77,22 +77,22 @@ T := nil | bit | i64 | f64 | u8      -- scalars
    | T | T                           -- union
    | { sym: T, … }                   -- record (tab) type
    | fun(T, …) -> T                  -- function type
-   | name                            -- a named type (typ)
+   | name                            -- a named type
 
-typ name = T                         -- type alias
-typ name = T where <fun>             -- predicate subtype; <fun> is a pure fun(T)->bit
+type name = T                        -- type alias
+type name = T where <fun>            -- predicate subtype; <fun> is a pure fun(T)->bit
 ```
 
 - `T?` is sugar for `T | nil`.
-- A `typ name = T where p` defines `name` as the subtype of `T` whose values
+- A `type name = T where p` defines `name` as the subtype of `T` whose values
   satisfy the predicate `p`. Statically `name ≤ T`. The predicate must not
   capture `io`.
-- **`where` is optional.** `typ name = T` names `T` and nothing more — the
+- **`where` is optional.** `type name = T` names `T` and nothing more — the
   always-true predicate, so `name` and `T` have exactly the same values. Naming
-  a record or function type this way is the usual reason to reach for `typ`:
-  `typ Frame = { ch: [u8], line: [i64] }` then reads as a type everywhere a
+  a record or function type this way is the usual reason to reach for `type`:
+  `type Frame = { ch: [u8], line: [i64] }` then reads as a type everywhere a
   signature would otherwise spell the whole record out.
-- A `typ` body may name other `typ`s (`typ Pass = { text: Text, code: Code }`).
+- A `type` body may name other `type`s (`type Pass = { text: Text, code: Code }`).
 
 ### 3.2 Built-in refinements over `[u8]`
 
@@ -145,7 +145,7 @@ positive. Unknown is not the common case; it arises only from these sources:
    unknown).
 
 Everything else infers a precise type, including: elementwise arithmetic and
-comparison (seeing through `typ` aliases over a numeric base); a mixed vector
+comparison (seeing through `type` aliases over a numeric base); a mixed vector
 literal (element type = the union of its elements'); `map`/`fold`/`scan`/`filter`;
 `select`; the reductions `sum`/`prod`/`min`/`max`; `cat`; `find`; `sums`/`prods`;
 `iota`/`grade`/`which`/`len`; the reshaping ops; `split`/`join`/`show`/`encode`/
@@ -167,7 +167,7 @@ value.
 ### 4.1 Keywords
 
 ```
-let fun typ mod pub use try else err if then where do end nil is
+let fun type mod pub use try else err if then where do end nil is
 true false and or not inf nan          -- also reserved
 bit i64 f64 u8                          -- type names
 ```
@@ -211,7 +211,7 @@ e := lit | x | e.x | e[e] | e(e, …)          -- literal, var, project, index, 
 
 d := let x[: T] = e
    | fun f(x: T, …) -> T = e                   -- sugar for  let f = fun(…) = e
-   | typ n = T [where e]
+   | type n = T [where e]
    | mod …                                     -- §4.7
    | use n [= "url"]                             -- §8
    | e                                         -- a bare expression is a declaration
@@ -442,7 +442,7 @@ These take the vector **last**, so they chain through the pipe.
 - **Scatter** (the inverse): `scatter(ivec, vals, base)` yields `base` with
   `base[ivec[k]] := vals[k]`. Later writes win; `vals` may be a scalar,
   broadcast to every index.
-- A **`typ` name** indexes as whatever it names (including `str` / `sym`, which
+- A **`type` name** indexes as whatever it names (including `str` / `sym`, which
   index as `[u8]`). The result has the *base* type, not the name: indexing need
   not preserve a refinement, since a slice of a `str` need not be UTF-8.
 
@@ -623,7 +623,7 @@ order is fixed; declaration nodes take an optional `doc`.
 {n='tab,  k=[…], e=[…]}     {n='fun,  p=[…], t, e}     {n='if,   c, t, e}
 {n='try,  e1, e2}           {n='err,  e}               {n='is,   e, t}
 {n='as,   e, t}             {n='seq,  d=[…]}
-{n='let,  x, t?, e, doc?, pub?}  {n='typ, x, t, p, doc?, pub?}  {n='use, x, doc?}
+{n='let,  x, t?, e, doc?, pub?}  {n='type, x, t, p, doc?, pub?}  {n='use, x, doc?}
 ```
 
 - `mod` desugars before encoding; operators encode as `app` of builtin names.

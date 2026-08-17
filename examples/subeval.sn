@@ -12,10 +12,10 @@
 -- The io capability the child hands the closure. A closure names only the fields
 -- it uses (a narrower record still matches — see the pure thunks below), so this
 -- is the full menu, not a requirement.
-typ IO = { exe:   fun() -> [u8],
-           spawn: fun([u8], [[u8]], [u8], [[u8]]) -> [u8],
-           read:  fun([u8]) -> [u8],
-           write: fun([u8], [u8]) -> nil };
+type IO = { exe:   fun() -> [u8],
+            spawn: fun([u8], [[u8]], [u8], [[u8]]) -> [u8],
+            read:  fun([u8]) -> [u8],
+            write: fun([u8], [u8]) -> nil };
 
 -- Ship `thunk` to a child interpreter and return the bytes it produced. `io.exe`
 -- is the path of our own interpreter; `io.spawn` runs it as `snel apply`, feeding

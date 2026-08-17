@@ -26,7 +26,7 @@ pub struct CErr {
 
 struct Scope<'a> {
     vars: Vec<(Sym, Option<Ty>)>, // term name -> type (None = unknown)
-    typs: Vec<(Sym, Ty)>,         // type name -> base (for refinements)
+    types: Vec<(Sym, Ty)>,        // type name -> base (for refinements)
     // resolve a `use`d unit name to its interface (tab) type; None = unknown
     resolve_use: &'a dyn Fn(&Sym) -> Option<Ty>,
 }
@@ -45,7 +45,7 @@ pub fn check_unit_with(
 ) -> Result<(), CErr> {
     let mut sc = Scope {
         vars: toplevel.iter().map(|n| (n.clone(), None)).collect(),
-        typs: Vec::new(),
+        types: Vec::new(),
         resolve_use,
     };
     for d in ds {
@@ -64,13 +64,13 @@ fn name_of(b: &Sym) -> String {
 
 // ---------- subtyping ----------
 
-// Resolve a named type to its base (str/sym over [u8]; a `typ` alias to its
+// Resolve a named type to its base (str/sym over [u8]; a `type` alias to its
 // base). None if the name is not a known type — treated permissively by `sub`.
 fn resolve_base(sc: &Scope, n: &Sym) -> Option<Ty> {
     if crate::eval::builtin_type(n.bytes()) {
         return Some(Ty::Vec(Box::new(Ty::U8)));
     }
-    sc.typs.iter().rev().find(|(x, _)| x == n).map(|(_, b)| b.clone())
+    sc.types.iter().rev().find(|(x, _)| x == n).map(|(_, b)| b.clone())
 }
 
 // Structural subtyping: width/depth-covariant records, contravariant-arg /
@@ -115,7 +115,7 @@ fn as_tab(sc: &Scope, t: &Ty) -> Option<Vec<(Sym, Ty)>> {
     }
 }
 
-// Follow a chain of `typ` names down to the type underneath. Bounded, so a
+// Follow a chain of `type` names down to the type underneath. Bounded, so a
 // pathological alias that names itself cannot spin.
 fn deref_name(sc: &Scope, t: &Ty) -> Option<Ty> {
     let mut cur = t.clone();
@@ -187,7 +187,7 @@ fn branch_join(sc: &Scope, a: Option<Ty>, b: Option<Ty>, sp: Span) -> Result<Opt
 fn check_ty(sc: &Scope, t: &Ty, sp: Span) -> Result<(), CErr> {
     match t {
         Ty::Name(n) => {
-            if crate::eval::builtin_type(n.bytes()) || sc.typs.iter().any(|(x, _)| x == n) {
+            if crate::eval::builtin_type(n.bytes()) || sc.types.iter().any(|(x, _)| x == n) {
                 Ok(())
             } else {
                 err(format!("unknown type `{}`", name_of(n)), sp)
@@ -235,7 +235,7 @@ fn shape(sc: &Scope, t: &Ty) -> Shape {
 
 // A clean numeric operand as (base ∈ {i64,f64}, is_vec, nilable), else None.
 // A named type is resolved to its base first, so arithmetic and the numeric
-// reductions see through a `typ` alias over a numeric base (e.g. `pos = i64`).
+// reductions see through a `type` alias over a numeric base (e.g. `pos = i64`).
 fn peel_num(sc: &Scope, t: &Ty) -> Option<(Ty, bool, bool)> {
     fn scalar(sc: &Scope, t: &Ty) -> Option<(Ty, bool)> {
         match t {
@@ -462,7 +462,7 @@ fn check_app(sc: &mut Scope, f: &Node, args: &[Node], sp: Span) -> Result<Option
         }
     }
     let ft = infer(sc, f)?;
-    // a `typ` alias over a function type is callable as that function type
+    // a `type` alias over a function type is callable as that function type
     let ft = match &ft {
         Some(t @ Ty::Name(_)) => deref_name(sc, t),
         _ => ft,
@@ -522,7 +522,7 @@ fn infer(sc: &mut Scope, n: &Node) -> Result<Option<Ty>, CErr> {
         Ast::Idx(e, i) => {
             let et = infer(sc, e)?;
             infer(sc, i)?;
-            // A `typ` name indexes as whatever it names — but the *result* is the
+            // A `type` name indexes as whatever it names — but the *result* is the
             // base type, not the name: indexing need not preserve a refinement
             // (a slice of a `str` need not be valid UTF-8).
             let et = match &et {
@@ -619,16 +619,16 @@ fn infer(sc: &mut Scope, n: &Node) -> Result<Option<Ty>, CErr> {
         }
         Ast::Seq(ds) => {
             let vdepth = sc.vars.len();
-            let tdepth = sc.typs.len();
+            let tdepth = sc.types.len();
             let mut last = None;
             for d in ds {
                 last = check_decl(sc, d)?;
             }
             sc.vars.truncate(vdepth);
-            sc.typs.truncate(tdepth);
+            sc.types.truncate(tdepth);
             last
         }
-        Ast::Let { .. } | Ast::Typ { .. } | Ast::Use { .. } => {
+        Ast::Let { .. } | Ast::Type { .. } | Ast::Use { .. } => {
             check_decl(sc, n)?;
             None
         }
@@ -649,10 +649,10 @@ fn check_decl(sc: &mut Scope, d: &Node) -> Result<Option<Ty>, CErr> {
             sc.vars.push((x.clone(), bound.clone()));
             bound
         }
-        Ast::Typ { x, base, pred, .. } => {
+        Ast::Type { x, base, pred, .. } => {
             check_ty(sc, base, d.span)?;
             infer(sc, pred)?;
-            sc.typs.push((x.clone(), base.clone()));
+            sc.types.push((x.clone(), base.clone()));
             None
         }
         Ast::Use { x, .. } => {

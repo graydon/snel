@@ -62,7 +62,7 @@ fun rank_in_run(key: [i64]) -> [i64] = flatten(map(iota, map(len, partition(runs
 -- from. Phase 1 rewrites the characters, and the line column rides along, so an
 -- instruction produced by the last pass still knows which statement it belongs
 -- to. Blanks are dropped; newlines stay, because they separate statements.
-typ Text = { ch: [u8], line: [i64] };
+type Text = { ch: [u8], line: [i64] };
 
 fun text_of(src: [u8]) -> Text = (
   let ch = src[src <> ' '];
@@ -83,8 +83,8 @@ fun line_count(t: Text) -> i64 = max(cat(t.line, [0])) + 1;
 -- Instructions are made in six batches — all the ops, all the branches, and so
 -- on — which arrive in no particular order. `stage` and `line` are what put them
 -- back in program order, at the very end, with one sort.
-typ Code = { line: [i64], stage: [i64], kind: [i64], dst: [u8], x: [u8], f: [u8],
-             y: [u8], blk: [i64], top: [bit] };
+type Code = { line: [i64], stage: [i64], kind: [i64], dst: [u8], x: [u8], f: [u8],
+              y: [u8], blk: [i64], top: [bit] };
 
 let SET = 0; let OP = 1; let LABEL = 2; let BRANCH = 3; let JUMP = 4; let HALT = 5;
 
@@ -152,7 +152,7 @@ fun group_starts(t: Text) -> [i64] = which(map(is_group, windows(5, cat(t.ch, " 
 -- The reduction state: the text so far, the op instructions so far, and `used` —
 -- a column holding one running temporary-counter *per line*, so every statement
 -- numbers its own temporaries A, B, C… independently and all at the same time.
-typ Pass = { text: Text, code: Code, used: [i64] };
+type Pass = { text: Text, code: Code, used: [i64] };
 
 fun reduce(st: Pass, stage: i64) -> Pass = (
   let s    = st.text.ch;

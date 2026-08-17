@@ -682,8 +682,8 @@ pub fn ast_to_val(n: &Node) -> Val {
             }
             node_val(t)
         }
-        Ast::Typ { x, base, pred, doc, public } => {
-            let mut t = tag("typ");
+        Ast::Type { x, base, pred, doc, public } => {
+            let mut t = tag("type");
             t.bind(Bytes::str("x"), vstr(x.bytes()), None);
             t.bind(Bytes::str("t"), ty_to_val(base), None);
             t.bind(Bytes::str("p"), v(pred), None);
@@ -785,7 +785,7 @@ pub fn val_to_ast(v: &Val) -> R<Node> {
             doc,
             public,
         },
-        b"typ" => Ast::Typ { x: sym(b"x")?, base: ty(b"t")?, pred: node(b"p")?, doc, public },
+        b"type" => Ast::Type { x: sym(b"x")?, base: ty(b"t")?, pred: node(b"p")?, doc, public },
         b"use" => Ast::Use { x: sym(b"x")?, url: t.get(b"url").and_then(str_bytes), doc },
         k => return Err(format!("unknown node kind {:?}", Bytes::new(k))),
     };

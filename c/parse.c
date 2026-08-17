@@ -9,10 +9,10 @@
 
 Node *node_new(AKind k, uint32_t lo);
 
-static const char *KEYWORDS[] = {"let", "fun", "typ",  "mod",   "pub", "use", "try", "else",
-                                 "err", "if",  "then", "where", "nil", "is",  "and", "or",
-                                 "not", "inf", "nan",  "true",  "false", "do",  "end", "bit",
-                                 "i64", "f64", "u8",   NULL};
+static const char *KEYWORDS[] = {"let",  "fun", "type", "mod",  "pub",   "use",  "try",
+                                 "else", "err", "if",   "then", "where", "nil",  "is",
+                                 "and",  "or",  "not",  "inf",  "nan",   "true", "false",
+                                 "do",   "end", "bit",  "i64",  "f64",   "u8",   NULL};
 
 typedef struct {
     Lexed L;
@@ -542,7 +542,7 @@ static Node *p_postfix(P *p) {
 }
 
 static bool is_decl_node(Node *n) {
-    return n->k == A_LET || n->k == A_TYP || n->k == A_USE;
+    return n->k == A_LET || n->k == A_TYPE || n->k == A_USE;
 }
 
 static Node *p_atom(P *p) {
@@ -932,7 +932,7 @@ static Node *p_mod(P *p, uint32_t lo, bool has_doc, Bin doc, bool is_pub) {
             else
                 pubhas[npub] = false;
             npub++;
-        } else if (d->k == A_LET || d->k == A_TYP || d->k == A_USE) {
+        } else if (d->k == A_LET || d->k == A_TYPE || d->k == A_USE) {
             // private / type decls allowed
         } else
             perr(p, "mod body must contain only declarations");
@@ -1031,7 +1031,7 @@ static Node *p_decl(P *p) {
         n->is_pub = is_pub;
         return n;
     }
-    if (take_kw(p, "typ")) {
+    if (take_kw(p, "type")) {
         Bin x = p_name(p);
         eat(p, "=");
         Ty base = p_ty(p);
@@ -1040,7 +1040,7 @@ static Node *p_decl(P *p) {
             pred = p_expr(p);
         else
             pred = always_true(lo, base);
-        Node *n = node_new(A_TYP, lo);
+        Node *n = node_new(A_TYPE, lo);
         n->name = x;
         n->ty = base;
         n->has_ty = true;
@@ -1072,7 +1072,7 @@ static Node *p_decl(P *p) {
     if (take_kw(p, "mod"))
         return p_mod(p, lo, has_doc, doc, is_pub);
     if (is_pub)
-        perr(p, "pub must precede let/fun/typ/mod");
+        perr(p, "pub must precede let/fun/type/mod");
     if (has_doc)
         perr(p, "doc comment must precede a declaration");
     return p_expr(p);

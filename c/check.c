@@ -72,7 +72,7 @@ static void push_var(Scope *s, Bin name, CT t) {
     s->vt[s->nv] = t;
     s->nv++;
 }
-static void push_typ(Scope *s, Bin name, Ty base) {
+static void push_type(Scope *s, Bin name, Ty base) {
     if (s->nt == s->ct) {
         s->ct = s->ct ? s->ct * 2 : 16;
         s->tn = realloc(s->tn, s->ct * sizeof(Bin));
@@ -157,7 +157,7 @@ static bool resolve_base(Scope *s, const Bin *n, Ty *out) {
     return false;
 }
 
-// Follow a chain of `typ` names down to the type underneath. Bounded, so a
+// Follow a chain of `type` names down to the type underneath. Bounded, so a
 // pathological alias that names itself cannot spin.
 static bool deref_name(Scope *s, const Ty *t, Ty *out) {
     Ty cur = *t;
@@ -415,7 +415,7 @@ static Ty mk_scalar(TKind k) {
 }
 
 // A named type is resolved to its base first, so arithmetic and the numeric
-// reductions see through a `typ` alias over a numeric base (mirrors check.rs).
+// reductions see through a `type` alias over a numeric base (mirrors check.rs).
 static bool peel_scalar_num(Scope *s, const Ty *t, Ty *base, bool *nil) {
     if (t->k == T_I64 || t->k == T_F64) {
         *base = mk_scalar(t->k);
@@ -683,13 +683,13 @@ static bool check_decl(Scope *s, const Node *d, CT *out) {
             *out = bound;
             return true;
         }
-        case A_TYP: {
+        case A_TYPE: {
             if (!check_ty(s, &d->ty, d->lo))
                 return false;
             CT pt;
             if (!infer(s, d->a, &pt))
                 return false;
-            push_typ(s, d->name, d->ty);
+            push_type(s, d->name, d->ty);
             *out = ct_none();
             return true;
         }
@@ -790,7 +790,7 @@ static bool check_app(Scope *s, const Node *n, CT *out) {
     CT ft;
     if (!infer(s, f, &ft))
         return false;
-    // a `typ` alias over a function type is callable as that function type
+    // a `type` alias over a function type is callable as that function type
     if (ft.known && ft.ty.k == T_NAME) {
         Ty base;
         if (deref_name(s, &ft.ty, &base))
@@ -877,7 +877,7 @@ static bool infer(Scope *s, const Node *n, CT *out) {
             CT i;
             if (!infer(s, n->b, &i))
                 return false;
-            // A `typ` name indexes as whatever it names — but the *result* is the
+            // A `type` name indexes as whatever it names — but the *result* is the
             // base type, not the name: indexing need not preserve a refinement
             // (a slice of a `str` need not be valid UTF-8).
             if (e.known && e.ty.k == T_NAME) {
@@ -1055,7 +1055,7 @@ static bool infer(Scope *s, const Node *n, CT *out) {
             return true;
         }
         case A_LET:
-        case A_TYP:
+        case A_TYPE:
         case A_USE: {
             CT c;
             if (!check_decl(s, n, &c))

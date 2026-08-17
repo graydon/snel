@@ -12,7 +12,7 @@ pub struct PErr {
 }
 
 const KEYWORDS: &[&str] = &[
-    "let", "fun", "typ", "mod", "pub", "use", "try", "else",
+    "let", "fun", "type", "mod", "pub", "use", "try", "else",
     "err", "if", "then", "where", "nil", "is", "and", "or", "not", "inf", "nan",
     "true", "false", "do", "end", "bit", "i64", "f64", "u8",
 ];
@@ -188,7 +188,7 @@ impl Parser {
                 return Ok(self.node(Ast::Let { x, ty: None, e: Box::new(f), doc, public }, lo));
             }
         }
-        if self.take_kw("typ") {
+        if self.take_kw("type") {
             let x = self.name()?;
             self.eat("=")?;
             let base = self.ty()?;
@@ -198,13 +198,13 @@ impl Parser {
             } else {
                 self.always_true(lo, &base)
             };
-            return Ok(self.node(Ast::Typ { x, base, pred: Box::new(pred), doc, public }, lo));
+            return Ok(self.node(Ast::Type { x, base, pred: Box::new(pred), doc, public }, lo));
         }
         if self.take_kw("mod") {
             return self.mod_decl(lo, doc, public);
         }
         if public {
-            return self.err("`pub` must precede let/fun/typ/mod");
+            return self.err("`pub` must precede let/fun/type/mod");
         }
         if self.take_kw("use") {
             let x = self.name()?;
@@ -243,8 +243,8 @@ impl Parser {
                     let t = ty.clone().or_else(|| fun_sig(e));
                     pubs.push((x.clone(), t));
                 }
-                Ast::Typ { x, public: true, .. } => pubs.push((x.clone(), Some(Ty::Tab(Vec::new())))),
-                Ast::Typ { .. } | Ast::Let { .. } | Ast::Use { .. } => {}
+                Ast::Type { x, public: true, .. } => pubs.push((x.clone(), Some(Ty::Tab(Vec::new())))),
+                Ast::Type { .. } | Ast::Let { .. } | Ast::Use { .. } => {}
                 _ => return self.err("mod body must contain only declarations"),
             }
         }
@@ -723,7 +723,7 @@ impl Parser {
 }
 
 fn is_decl(n: &Node) -> bool {
-    matches!(n.ast, Ast::Let { .. } | Ast::Typ { .. } | Ast::Use { .. })
+    matches!(n.ast, Ast::Let { .. } | Ast::Type { .. } | Ast::Use { .. })
 }
 
 // The syntactic fun type of a fun literal, if e is one (for mod pub sigs).

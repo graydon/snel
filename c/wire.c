@@ -1149,8 +1149,8 @@ Val ast_to_val(const Node *n) {
             if (n->is_pub)
                 bind_s(t, "pub", vbit(true));
             break;
-        case A_TYP:
-            t = tag_tab("typ");
+        case A_TYPE:
+            t = tag_tab("type");
             {
                 Val v;
                 v = vstr_b(&(n->name));
@@ -1378,8 +1378,8 @@ bool val_to_ast(const Val *v, Node **out, SnelErr *err) {
         Val *pb;
         if (vget(t, "pub", &pb) && pb->k == V_BIT && pb->u.i)
             n->is_pub = true;
-    } else if (KIS("typ")) {
-        n = node_new(A_TYP, 0);
+    } else if (KIS("type")) {
+        n = node_new(A_TYPE, 0);
         if (!vget(t, "x", &tmp) || !sb(tmp, &n->name))
             return false;
         if (!vget(t, "t", &tmp) || !val_to_ty(tmp, &n->ty))
